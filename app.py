@@ -3,13 +3,13 @@ import sqlite3
 import os
 import pandas as pd
 from datetime import datetime
+import io
 
 # --- PODEŠAVANJE BAZE PODATAKA ---
 def kreiraj_bazu():
     conn = sqlite3.connect("magacin.db")
     cursor = conn.cursor()
     
-    # Dodata kolona 'sezona' u tabelu artikli
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS artikli (
             sifra TEXT,
@@ -24,11 +24,10 @@ def kreiraj_bazu():
         )
     ''')
     
-    # Automatska migracija za postojeće baze (ako kolona sezona ne postoji, dodaj je)
     try:
         cursor.execute("ALTER TABLE artikli ADD COLUMN sezona TEXT DEFAULT 'Proleće-Leto'")
     except sqlite3.OperationalError:
-        pass # Kolona već postoji, preskoči
+        pass
         
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS izlaz_robe (
@@ -48,18 +47,23 @@ kreiraj_bazu()
 if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
 
+# Pomoćna funkcija za pretvaranje DataFrame-a u Excel format za preuzimanje
+def konvertuj_u_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Magacin')
+    return output.getvalue()
+
 # --- IZGLED APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 st.title("📦 Sistem za praćenje stanja u magacinu")
 
-# 1. PRVO BIRAMO SEZONU NA SIDEBAR-U
+# 1. SEZONA
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI SEZONU:", ["Proleće-Leto", "Jesen-Zima"])
-
 st.sidebar.markdown("---")
 
-# 2. ZATIM BIRAMO FUNKCIJU ZA TU SEZONU
+# 2. FUNKCIJA
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
-
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
@@ -103,69 +107,124 @@ if meni == "Unos nove robe":
                     conn.commit()
                     conn.close()
                     st.success(f"Uspešno sačuvan model u sezoni {izabrana_sezona}: Šifra '{sifra}' - Boja '{boja}'!")
+                    st.rerun()
                 except sqlite3.IntegrityError:
                     st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
 
-# --- OPCIJA 2: TRENUTNO STANJE FILTRIRANO PO SEZONI ---
+# --- OPCIJA 2: TRENUTNO STANJE (SA IZMENOM, BRISANJEM I EXCEL-om) ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sezona: {izabrana_sezona}")
     
     conn = sqlite3.connect("magacin.db")
-    # Čitamo iz baze samo artikle koji pripadaju izabranoj sezoni
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = ?", conn, params=(izabrana_sezona,))
     conn.close()
     
     if df.empty:
-        st.info(f"U sezoni {izabrana_sezona} trenutno nema unete robe. Izaberi 'Unos nove robe' sa leve strane.")
+        st.info(f"U sezoni {izabrana_sezona} trenutno nema unete robe.")
     else:
-        pretraga = st.text_input("🔍 Pretraži ovu sezonu po šifri modela:", "").strip().upper()
+        # --- DEO ZA IZVOZ U EXCEL ---
+        df_excel = df.copy()
+        df_excel["Broj kutija"] = df_excel["broj_pari"] // df_excel["pari_u_kutiji"]
+        df_excel["Ostatak pari"] = df_excel["broj_pari"] % df_excel["pari_u_kutiji"]
+        df_excel = df_excel.rename(columns={
+            "sifra": "Šifra modela", "boja": "Boja", "sezona": "Sezona", 
+            "broj_pari": "Ukupno pari", "pari_u_kutiji": "Pari u kutiji",
+            "prodajna_cena": "Prodajna cena (RSD)", "internet_cena": "Internet cena (RSD)"
+        }).drop(columns=["slika_putanja"], errors="ignore")
         
+        excel_podaci = konvertuj_u_excel(df_excel)
+        
+        st.download_button(
+            label="🟢 Preuzmi stanje kao Excel tabelu (.xlsx)",
+            data=excel_podaci,
+            file_name=f"stanje_magacina_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.markdown("---")
+        
+        # PRETRAGA
+        pretraga = st.text_input("🔍 Pretraži ovu sezonu po šifri modela:", "").strip().upper()
         if pretraga:
             df = df[df["sifra"].str.contains(pretraga, na=False)]
         
         if df.empty:
-            st.warning(f"Nema rezultata za šifru '{pretraga}' u sezoni {izabrana_sezona}")
+            st.warning(f"Nema rezultata za šifru '{pretraga}'")
         else:
-            df["Broj kutija"] = df["broj_pari"] // df["pari_u_kutiji"]
-            df["Preostalo pari van kutije"] = df["broj_pari"] % df["pari_u_kutiji"]
-            
-            df_prikaz = df.rename(columns={
-                "sifra": "Šifra modela",
-                "boja": "Boja",
-                "broj_pari": "Ukupno pari",
-                "pari_u_kutiji": "Pari u kutiji",
-                "prodajna_cena": "Prodajna cena (RSD)",
-                "internet_cena": "Internet cena (RSD)"
-            })
-            
-            for index, row in df_prikaz.iterrows():
+            for index, row in df.iterrows():
+                # Kreiramo jedinstveni identifikator za svaki artikal za forme
+                sif = row['sifra']
+                boj = row['boja']
+                kljuc_id = f"{sif}_{boj}"
+                
+                br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
+                ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
+                
                 with st.container():
-                    col_slika, col_detalji = st.columns([1, 4])
+                    col_slika, col_detalji, col_akcije = st.columns([1, 3, 1.5])
                     
                     with col_slika:
                         putanja = row["slika_putanja"]
                         if putanja and os.path.exists(putanja):
-                            st.image(putanja, width=130)
+                            st.image(putanja, width=120)
                         else:
                             st.write("❌ Nema slike")
                             
                     with col_detalji:
-                        st.subheader(f"Model: {row['Šifra modela']} | Boja: {row['Boja']}")
-                        
+                        st.subheader(f"Model: {sif} | Boja: {boj}")
                         c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Ukupno pari na stanju", f"{row['Ukupno pari']} kom")
-                        c2.metric("Pakovanje (Kutija / Ostatak)", f"{row['Broj kutija']} kut. + {row['Preostalo pari van kutije']} par")
-                        c3.metric("Prodajna cena", f"{row['Prodajna cena (RSD)']} din")
-                        c4.metric("Internet cena", f"{row['Internet cena (RSD)']} din")
-                    st.markdown("---")
+                        c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
+                        c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
+                        c3.metric("Prodajna", f"{row['prodajna_cena']} din")
+                        c4.metric("Internet", f"{row['internet_cena']} din")
+                        
+                    with col_akcije:
+                        # --- DUŠME ZA IZMENU I BRISANJE ---
+                        ekspander = st.expander("🛠️ Izmeni / Obriši")
+                        with ekspander:
+                            st.write("**Uredi podatke:**")
+                            nova_kol = st.number_input("Novo ukupno pari:", min_value=0, value=int(row['broj_pari']), step=1, key=f"kol_{kljuc_id}")
+                            nova_p_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, value=float(row['prodajna_cena']), step=50.0, key=f"pc_{kljuc_id}")
+                            nova_i_cena = st.number_input("Internet cena (RSD):", min_value=0.0, value=float(row['internet_cena']), step=50.0, key=f"ic_{kljuc_id}")
+                            
+                            col_b1, col_b2 = st.columns(2)
+                            with col_b1:
+                                if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
+                                    conn = sqlite3.connect("magacin.db")
+                                    cursor = conn.cursor()
+                                    cursor.execute('''
+                                        UPDATE artikli 
+                                        SET broj_pari = ?, prodajna_cena = ?, internet_cena = ?
+                                        WHERE sifra = ? AND boja = ? AND sezona = ?
+                                    ''', (nova_kol, nova_p_cena, nova_i_cena, sif, boj, izabrana_sezona))
+                                    conn.commit()
+                                    conn.close()
+                                    st.success("Izmenjeno!")
+                                    st.rerun()
+                                    
+                            with col_b2:
+                                if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
+                                    conn = sqlite3.connect("magacin.db")
+                                    cursor = conn.cursor()
+                                    cursor.execute("DELETE FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (sif, boj, izabrana_sezona))
+                                    conn.commit()
+                                    conn.close()
+                                    
+                                    # Brisanje slike sa računara ako postoji
+                                    if putanja and os.path.exists(putanja):
+                                        os.remove(putanja)
+                                        
+                                    st.warning("Obrisano!")
+                                    st.rerun()
+                                    
+                st.markdown("---")
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA FILTRIRANO PO SEZONI ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sezona: {izabrana_sezona}")
     
     conn = sqlite3.connect("magacin.db")
     cursor = conn.cursor()
-    # Nudimo samo šifre iz trenutno izabrane sezone
     cursor.execute("SELECT DISTINCT sifra FROM artikli WHERE sezona = ?", (izabrana_sezona,))
     sve_sifre = [red[0] for red in cursor.fetchall()]
     conn.close()
@@ -224,13 +283,20 @@ elif meni == "Evidencija izlaza (Po danima)":
                     st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
                     st.rerun()
 
-        # Istorija prikazuje sve izlaze, ali radi lakšeg snalaženja
+        # Istorija i izvoz istorije u Excel
         st.subheader("📋 Istorija dnevnih izlaza robe (Sve sezone)")
         conn = sqlite3.connect("magacin.db")
         df_izlazi = pd.read_sql_query("SELECT datum AS 'Datum', sifra_artikla AS 'Šifra modela', boja_artikla AS 'Boja', kolicina_izlaz AS 'Izašlo (pari)' FROM izlaz_robe ORDER BY id DESC", conn)
         conn.close()
         
         if not df_izlazi.empty:
+            excel_izlazi = konvertuj_u_excel(df_izlazi)
+            st.download_button(
+                label="🟢 Preuzmi celu istoriju izlaza kao Excel",
+                data=excel_izlazi,
+                file_name=f"istorija_izlaza_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
             st.dataframe(df_izlazi, use_container_width=True)
         else:
             st.write("Još uvek nema zabeleženih izlaza robe.")
