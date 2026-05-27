@@ -291,7 +291,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.subheader("📋 Istorija dnevnih izlaza robe")
         
         conn = sqlite3.connect("magacin.db")
-        df_izlazi = pd.read_sql_query("SELECT datum AS 'Datum', sifra_artikla AS 'Šifra modela', boja_artikla AS 'Boja', kolicina_izlaz AS 'Izašlo (pari)' FROM izlaz_robe ORDER BY Datum DESC, id DESC", conn)
+        df_izlazi = pd.read_sql_query("SELECT datum AS 'Datum', sifra_artikla AS 'Šifra modela', boja_artikla AS 'Boja', kolicina_izlaz AS 'Izašlo (pari)' FROM izlaz_robe ORDER BY id ASC", conn)
         conn.close()
         
         if not df_izlazi.empty:
