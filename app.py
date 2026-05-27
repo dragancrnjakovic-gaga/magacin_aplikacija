@@ -10,7 +10,6 @@ def kreiraj_bazu():
     conn = sqlite3.connect("magacin.db")
     cursor = conn.cursor()
     
-    # Tabela za artikle
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS artikli (
             sifra TEXT,
@@ -30,7 +29,6 @@ def kreiraj_bazu():
     except sqlite3.OperationalError:
         pass
         
-    # Tabela za izlaz robe
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS izlaz_robe (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,14 +40,12 @@ def kreiraj_bazu():
         )
     ''')
     
-    # NOVA TABELA: Samo za čuvanje predefinisanih boja
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sifrarnik_boja (
             boja TEXT PRIMARY KEY
         )
     ''')
     
-    # Ubacujemo nekoliko osnovnih boja automatski ako je tabela prazna
     cursor.execute("SELECT COUNT(*) FROM sifrarnik_boja")
     if cursor.fetchone()[0] == 0:
         pocetne_boje = [("Black",), ("Blue",), ("Red",), ("Gray",), ("White",), ("Beige",)]
@@ -63,7 +59,6 @@ kreiraj_bazu()
 if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
 
-# Pomoćna funkcija za dobijanje liste boja iz baze
 def ucitaj_boje():
     conn = sqlite3.connect("magacin.db")
     cursor = conn.cursor()
@@ -72,7 +67,6 @@ def ucitaj_boje():
     conn.close()
     return boje
 
-# Pomoćna funkcija za Excel
 def konvertuj_u_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -117,7 +111,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Glavni naslov
 st.title("📦 Sistem za praćenje stanja u magacinu")
 
 # 1. SEZONA
@@ -132,7 +125,6 @@ st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 if meni == "Unos nove robe":
     st.header(f"➕ Unos novog artikla ({izabrana_sezona})")
     
-    # Učitavamo trenutne boje iz baze za padajući meni
     lista_boja = ucitaj_boje()
     
     with st.form("forma_za_unos", clear_on_submit=True):
@@ -140,7 +132,6 @@ if meni == "Unos nove robe":
         
         with col1:
             sifra = st.text_input("Šifra modela:").strip().upper()
-            # PROMENJENO: Umesto slobodnog unosa teksta, sada je st.selectbox (padajući meni)
             boja = st.selectbox("Boja modela:", lista_boja)
             broj_pari = st.number_input("Količina pari:", min_value=0, step=1)
             pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1)
@@ -177,7 +168,6 @@ if meni == "Unos nove robe":
                 except sqlite3.IntegrityError:
                     st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
 
-    # NOVI DEO: Mini-sekcija ispod forme za dodavanje potpuno novih boja
     st.markdown("---")
     st.subheader("🎨 Upravljanje listom boja")
     col_nova_boja, col_dugme_boja = st.columns([3, 1])
@@ -186,7 +176,7 @@ if meni == "Unos nove robe":
         nova_boja_unos = st.text_input("Unesi naziv nove boje (npr. Zelena, Camel, Pink):", "").strip().capitalize()
     
     with col_dugme_boja:
-        st.write("") # Malo prostora da se poravna sa poljem
+        st.write("") 
         st.write("") 
         if st.button("➕ Dodaj boju u listu"):
             if nova_boja_unos == "":
@@ -339,17 +329,21 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    trenutno_na_stanju = rezultat[0]
+                    trenutno_na_stanju = resultado = rezultat[0]
                 conn.close()
             
             st.write("")
             st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
             
-            kolicina_izlaza = st.number_input("Koliko pari izlazi iz magacina:", min_value=1, max_value=max(1, trenutno_na_stanju), step=1, key="izlaz_kolicina_input")
+            # PROMENJENO: value=None postavlja polje da inicijalno bude potpuno prazno
+            kolicina_izlaza = st.number_input("Koliko pari izlazi iz magacina:", min_value=1, max_value=max(1, trenutno_na_stanju), step=1, value=None, key="izlaz_kolicina_input")
         
-        if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz"):
-            if trenutno_na_stanju < kolicina_izlaza or trenutno_na_stanju == 0:
-                st.error("Greška: Nemate dovoljno pari na stanju ili boja nije pravilno izabrana!")
+        # PROMENJENO: Dugme ima uslov `disabled=...` koji proverava da li je količina prazna ili manja/jednaka nuli
+        dugme_onemoguceno = kolicina_izlaza is None or kolicina_izlaza <= 0
+        
+        if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz", disabled=dugme_onemoguceno):
+            if kolicina_izlaza is None or trenutno_na_stanju < kolicina_izlaza or trenutno_na_stanju == 0:
+                st.error("Greška: Nemate dovoljno pari na stanju ili niste uneli količinu!")
             else:
                 conn = sqlite3.connect("magacin.db")
                 cursor = conn.cursor()
