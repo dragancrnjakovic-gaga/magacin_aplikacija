@@ -354,7 +354,17 @@ elif meni == "Evidencija izlaza (Po danima)":
             st.write("")
             st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
             
-            kolicina_izlaza = st.number_input("Koliko pari izlazi iz magacina:", min_value=1, max_value=max(1, trenutno_na_stanju), step=1, value=None, key="izlaz_kolicina_input")
+            # ISPRAVLJENO: Koristimo ključ koji ima jedinstveni sufiks na osnovu šifre i boje kako bismo bezbedno kontrolisali resetovanje
+            kljuc_kolicine = f"kolicina_{izabrana_sifra}_{izabrana_boja}"
+            
+            kolicina_izlaza = st.number_input(
+                "Koliko pari izlazi iz magacina:", 
+                min_value=1, 
+                max_value=max(1, trenutno_na_stanju), 
+                step=1, 
+                value=None, 
+                key=kljuc_kolicine
+            )
         
         dugme_onemoguceno = kolicina_izlaza is None or kolicina_izlaza <= 0
         
@@ -378,9 +388,9 @@ elif meni == "Evidencija izlaza (Po danima)":
                 conn.commit()
                 conn.close()
                 
-                # PROMENJENO: Pre osvežavanja, čistimo uneti broj iz memorije (session_state)
-                if "izlaz_kolicina_input" in st.session_state:
-                    st.session_state["izlaz_kolicina_input"] = None
+                # ISPRAVLJENO: Umesto direktnog dodeljivanja None, koristimo del() i st.rerun() da primoramo Streamlit da ponovo iscrta čisto polje
+                if kljuc_kolicine in st.session_state:
+                    del st.session_state[kljuc_kolicine]
                 
                 st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
                 st.rerun()
