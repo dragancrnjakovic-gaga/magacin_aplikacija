@@ -57,16 +57,16 @@ def konvertuj_u_excel(df):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
-# --- NOVI SIGURNI CSS (Bez pomeranja čitave stranice nagore) ---
+# --- CSS (Bez pomeranja čitave stranice nagore, naslovi su sigurni) ---
 st.markdown("""
     <style>
-    /* Vraćamo normalan gornji razmak stranice da naslovi NE bi bili isečeni */
+    /* Normalan gornji razmak stranice da naslovi NE bi bili isečeni */
     .block-container {
         padding-top: 3.5rem !important;
         padding-bottom: 2rem !important;
     }
     
-    /* Glavni naslov - uklonjen padding da ne zauzima previše mesta, ali je na bezbednom mestu */
+    /* Glavni naslov */
     h1 {
         font-size: 1.8rem !important;
         padding-bottom: 10px !important;
@@ -127,7 +127,8 @@ if meni == "Unos nove robe":
         with col1:
             sifra = st.text_input("Šifra modela:").strip().upper()
             boja = st.text_input("Boja modela:").strip().capitalize()
-            broj_pari = st.number_input("Broj pari:", min_value=0, step=1)
+            # PROMENJENO: "Broj pari:" je sada "Količina pari:"
+            broj_pari = st.number_input("Količina pari:", min_value=0, step=1)
             pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1)
             
         with col2:
@@ -297,7 +298,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
-                if resultado = rezultat:
+                if rezultat:
+                    # ISPRAVLJENO: Sklonjena loša linija koda koja je pravila SyntaxError
                     trenutno_na_stanju = rezultat[0]
                 conn.close()
             
