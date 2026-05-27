@@ -56,33 +56,7 @@ def kreiraj_bazu():
 
 kreiraj_bazu()
 
-# =====================================================================
-# 🚨 PRIVREMENI KOD ZA PRAŽNJENJE TEST PODATAKA 🚨
-# (Ovaj blok koda briše artikle i izlaze, i briše stare slike iz foldera)
-def isprazni_test_podatke():
-    conn = sqlite3.connect("magacin.db")
-    cursor = conn.cursor()
-    
-    # Brišemo sve iz tabele artikala i izlaza
-    cursor.execute("DELETE FROM artikli")
-    cursor.execute("DELETE FROM izlaz_robe")
-    
-    conn.commit()
-    conn.close()
-    
-    # Brišemo fizičke slike iz foldera da ne zauzimaju prostor na serveru
-    if os.path.exists("slike_modela"):
-        for fajl in os.listdir("slike_modela"):
-            putanja = os.path.join("slike_modela", fajl)
-            try:
-                if os.path.isfile(putanja):
-                    os.remove(putanja)
-            except:
-                pass
 
-# Pokrećemo brisanje
-isprazni_test_podatke()
-# =====================================================================
 
 if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
