@@ -7,7 +7,7 @@ import io
 
 # --- PODEŠAVANJE BAZE PODATAKA ---
 def kreiraj_bazu():
-    conn = sqlite3.connect("magacin.db")
+    conn = sqlite3.connect("magacin_glavni.db")
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -62,7 +62,7 @@ if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
 
 def ucitaj_boje():
-    conn = sqlite3.connect("magacin.db")
+    conn = sqlite3.connect("magacin_glavni.db")
     cursor = conn.cursor()
     cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
     boje = [red[0] for red in cursor.fetchall()]
@@ -164,7 +164,7 @@ if meni == "Unos nove robe":
                         f.write(slika.getbuffer())
                 
                 try:
-                    conn = sqlite3.connect("magacin.db")
+                    conn = sqlite3.connect("magacin_glavni.db")
                     cursor = conn.cursor()
                     cursor.execute('''
                         INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja)
@@ -192,7 +192,7 @@ if meni == "Unos nove robe":
                 st.error("Polje za novu boju ne može biti prazno!")
             else:
                 try:
-                    conn = sqlite3.connect("magacin.db")
+                    conn = sqlite3.connect("magacin_glavni.db")
                     cursor = conn.cursor()
                     cursor.execute("INSERT INTO sifrarnik_boja (boja) VALUES (?)", (nova_boja_unos,))
                     conn.commit()
@@ -206,7 +206,7 @@ if meni == "Unos nove robe":
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sezona: {izabrana_sezona}")
     
-    conn = sqlite3.connect("magacin.db")
+    conn = sqlite3.connect("magacin_glavni.db")
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = ?", conn, params=(izabrana_sezona,))
     conn.close()
     
@@ -296,7 +296,7 @@ elif meni == "Trenutno stanje":
                                         with open(finalna_putanja_slike, "wb") as f:
                                             f.write(nova_slika_file.getbuffer())
                                             
-                                    conn = sqlite3.connect("magacin.db")
+                                    conn = sqlite3.connect("magacin_glavni.db")
                                     cursor = conn.cursor()
                                     cursor.execute('''
                                         UPDATE artikli 
@@ -310,7 +310,7 @@ elif meni == "Trenutno stanje":
                                     
                             with col_b2:
                                 if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
-                                    conn = sqlite3.connect("magacin.db")
+                                    conn = sqlite3.connect("magacin_glavni.db")
                                     cursor = conn.cursor()
                                     cursor.execute("DELETE FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (sif, boj, izabrana_sezona))
                                     conn.commit()
@@ -328,7 +328,7 @@ elif meni == "Trenutno stanje":
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sezona: {izabrana_sezona}")
     
-    conn = sqlite3.connect("magacin.db")
+    conn = sqlite3.connect("magacin_glavni.db")
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT sifra FROM artikli WHERE sezona = ?", (izabrana_sezona,))
     sve_sifre = [red[0] for red in cursor.fetchall()]
@@ -343,7 +343,7 @@ elif meni == "Evidencija izlaza (Po danima)":
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
             
-            conn = sqlite3.connect("magacin.db")
+            conn = sqlite3.connect("magacin_glavni.db")
             cursor = conn.cursor()
             cursor.execute("SELECT boja FROM artikli WHERE sifra = ? AND sezona = ?", (izabrana_sifra, izabrana_sezona))
             dostupne_boje = [red[0] for red in cursor.fetchall()]
@@ -354,7 +354,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         with col2:
             trenutno_na_stanju = 0
             if izabrana_boja:
-                conn = sqlite3.connect("magacin.db")
+                conn = sqlite3.connect("magacin_glavni.db")
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
@@ -382,7 +382,7 @@ elif meni == "Evidencija izlaza (Po danima)":
             if kolicina_izlaza is None or trenutno_na_stanju < kolicina_izlaza or trenutno_na_stanju == 0:
                 st.error("Greška: Nemate dovoljno pari na stanju ili niste uneli količinu!")
             else:
-                conn = sqlite3.connect("magacin.db")
+                conn = sqlite3.connect("magacin_glavni.db")
                 cursor = conn.cursor()
                 
                 cursor.execute('''
@@ -407,7 +407,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         
         st.subheader("📋 Istorija dnevnih izlaza robe")
         
-        conn = sqlite3.connect("magacin.db")
+        conn = sqlite3.connect("magacin_glavni.db")
         df_izlazi = pd.read_sql_query("SELECT datum AS 'Datum', sifra_artikla AS 'Šifra modela', boja_artikla AS 'Boja', kolicina_izlaz AS 'Izašlo (pari)' FROM izlaz_robe ORDER BY id ASC", conn)
         conn.close()
         
