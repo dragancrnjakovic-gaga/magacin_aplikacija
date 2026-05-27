@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 import os
 import pandas as pd
-from datetime import datetime, transform
+from datetime import datetime
 import io
 
 # --- PODEŠAVANJE BAZE PODATAKA ---
