@@ -271,7 +271,7 @@ elif meni == "Trenutno stanje":
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
-                                    finalna_putanja_slike = trenches_slika = trenutna_slika
+                                    finalna_putanja_slike = trenutna_slika
                                     
                                     if nova_slika_file is not None:
                                         if trenutna_slika and os.path.exists(trenutna_slika):
@@ -326,7 +326,7 @@ elif meni == "Evidencija izlaza (Po danima)":
     if not sve_sifre:
         st.info(f"Nema unete robe u sezoni {izabrana_sezona} da biste zabeležili izlaz.")
     else:
-        # PROMENJENO: Ceo unos pakujemo u formu sa clear_on_submit=True
+        # Sve unose pakujemo u formu sa clear_on_submit=True za automatsko pražnjenje polja
         with st.form("forma_za_izlaz", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
@@ -349,9 +349,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                     cursor = conn.cursor()
                     cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                     rezultat = cursor.fetchone()
-                    if resultado:
-                        trenutno_na_stanju = rezultat[0]
-                    elif rezultat:
+                    if rezultat:
                         trenutno_na_stanju = rezultat[0]
                     conn.close()
                 
@@ -367,7 +365,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                     key="izlaz_kolicina_input_final"
                 )
             
-            # Form submit button
+            # ISPRAVLJENO: Dugme za slanje forme je ispravno postavljeno unutar "with" bloka
             dugme_potvrdi_izlaz = st.form_submit_button("Zapiši izlaz robe", type="primary")
             
             if dugme_potvrdi_izlaz:
