@@ -235,6 +235,7 @@ elif meni == "Trenutno stanje":
                 sif = row['sifra']
                 boj = row['boja']
                 kljuc_id = f"{sif}_{boj}"
+                trenutna_slika = row["slika_putanja"]
                 
                 br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
                 ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
@@ -243,9 +244,8 @@ elif meni == "Trenutno stanje":
                     col_slika, col_detalji, col_akcije = st.columns([1, 3, 1.5])
                     
                     with col_slika:
-                        putanja = row["slika_putanja"]
-                        if putanja and os.path.exists(putanja):
-                            st.image(putanja, width=120)
+                        if trenutna_slika and os.path.exists(trenutna_slika):
+                            st.image(trenutna_slika, width=120)
                         else:
                             st.write("❌ Nema slike")
                             
@@ -266,16 +266,36 @@ elif meni == "Trenutno stanje":
                             nova_p_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, value=float(row['prodajna_cena']), step=50.0, key=f"pc_{kljuc_id}")
                             nova_i_cena = st.number_input("Internet cena (RSD):", min_value=0.0, value=float(row['internet_cena']), step=50.0, key=f"ic_{kljuc_id}")
                             
+                            # PROMENJENO: Dodato polje za zamenu slike unutar izmena
+                            nova_slika_file = st.file_uploader("Zameni sliku artikla:", type=["jpg", "jpeg", "png"], key=f"img_{kljuc_id}")
+                            
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
+                                    finalna_putanja_slike = trenutna_slika
+                                    
+                                    # Ako je ubačena nova slika, obrađujemo je
+                                    if nova_slika_file is not None:
+                                        # Prvo obrišemo staru sliku sa diska ako postoji
+                                        if trenutna_slika and os.path.exists(trenutna_slika):
+                                            try:
+                                                os.remove(trenutna_slika)
+                                            except:
+                                                pass
+                                        
+                                        # Sačuvamo novu sliku
+                                        ekstenzija = nova_slika_file.name.split(".")[-1]
+                                        finalna_putanja_slike = f"slike_modela/{sif}_{boj}.{ekstenzija}"
+                                        with open(finalna_putanja_slike, "wb") as f:
+                                            f.write(nova_slika_file.getbuffer())
+                                            
                                     conn = sqlite3.connect("magacin.db")
                                     cursor = conn.cursor()
                                     cursor.execute('''
                                         UPDATE artikli 
-                                        SET broj_pari = ?, prodajna_cena = ?, internet_cena = ?
+                                        SET broj_pari = ?, prodajna_cena = ?, internet_cena = ?, slika_putanja = ?
                                         WHERE sifra = ? AND boja = ? AND sezona = ?
-                                    ''', (nova_kol, nova_p_cena, nova_i_cena, sif, boj, izabrana_sezona))
+                                    ''', (nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, sif, boj, izabrana_sezona))
                                     conn.commit()
                                     conn.close()
                                     st.success("Izmenjeno!")
@@ -288,8 +308,11 @@ elif meni == "Trenutno stanje":
                                     cursor.execute("DELETE FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (sif, boj, izabrana_sezona))
                                     conn.commit()
                                     conn.close()
-                                    if putanja and os.path.exists(putanja):
-                                        os.remove(putanja)
+                                    if trenutna_slika and os.path.exists(trenutna_slika):
+                                        try:
+                                            os.remove(trenutna_slika)
+                                        except:
+                                            pass
                                     st.warning("Obrisano!")
                                     st.rerun()
                 st.markdown("---")
@@ -329,16 +352,14 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    trenutno_na_stanju = resultado = rezultat[0]
+                    trenutno_na_stanju = rezultat[0]
                 conn.close()
             
             st.write("")
             st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
             
-            # PROMENJENO: value=None postavlja polje da inicijalno bude potpuno prazno
             kolicina_izlaza = st.number_input("Koliko pari izlazi iz magacina:", min_value=1, max_value=max(1, trenutno_na_stanju), step=1, value=None, key="izlaz_kolicina_input")
         
-        # PROMENJENO: Dugme ima uslov `disabled=...` koji proverava da li je količina prazna ili manja/jednaka nuli
         dugme_onemoguceno = kolicina_izlaza is None or kolicina_izlaza <= 0
         
         if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz", disabled=dugme_onemoguceno):
