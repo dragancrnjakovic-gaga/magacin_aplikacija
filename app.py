@@ -2,7 +2,7 @@ import streamlit as st
 import sqlite3
 import os
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, transform
 import io
 
 # --- PODEŠAVANJE BAZE PODATAKA ---
@@ -47,7 +47,7 @@ kreiraj_bazu()
 if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
 
-# Pomoćna funkcija za pretvaranje DataFrame-a u Excel format za preuzimanje
+# Pomoćna funkcija za Excel
 def konvertuj_u_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -111,7 +111,7 @@ if meni == "Unos nove robe":
                 except sqlite3.IntegrityError:
                     st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
 
-# --- OPCIJA 2: TRENUTNO STANJE (SA IZMENOM, BRISANJEM I EXCEL-om) ---
+# --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sezona: {izabrana_sezona}")
     
@@ -122,7 +122,6 @@ elif meni == "Trenutno stanje":
     if df.empty:
         st.info(f"U sezoni {izabrana_sezona} trenutno nema unete robe.")
     else:
-        # --- DEO ZA IZVOZ U EXCEL ---
         df_excel = df.copy()
         df_excel["Broj kutija"] = df_excel["broj_pari"] // df_excel["pari_u_kutiji"]
         df_excel["Ostatak pari"] = df_excel["broj_pari"] % df_excel["pari_u_kutiji"]
@@ -143,7 +142,6 @@ elif meni == "Trenutno stanje":
         
         st.markdown("---")
         
-        # PRETRAGA
         pretraga = st.text_input("🔍 Pretraži ovu sezonu po šifri modela:", "").strip().upper()
         if pretraga:
             df = df[df["sifra"].str.contains(pretraga, na=False)]
@@ -152,7 +150,6 @@ elif meni == "Trenutno stanje":
             st.warning(f"Nema rezultata za šifru '{pretraga}'")
         else:
             for index, row in df.iterrows():
-                # Kreiramo jedinstveni identifikator za svaki artikal za forme
                 sif = row['sifra']
                 boj = row['boja']
                 kljuc_id = f"{sif}_{boj}"
@@ -179,7 +176,6 @@ elif meni == "Trenutno stanje":
                         c4.metric("Internet", f"{row['internet_cena']} din")
                         
                     with col_akcije:
-                        # --- DUŠME ZA IZMENU I BRISANJE ---
                         ekspander = st.expander("🛠️ Izmeni / Obriši")
                         with ekspander:
                             st.write("**Uredi podatke:**")
@@ -209,17 +205,13 @@ elif meni == "Trenutno stanje":
                                     cursor.execute("DELETE FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (sif, boj, izabrana_sezona))
                                     conn.commit()
                                     conn.close()
-                                    
-                                    # Brisanje slike sa računara ako postoji
                                     if putanja and os.path.exists(putanja):
                                         os.remove(putanja)
-                                        
                                     st.warning("Obrisano!")
                                     st.rerun()
-                                    
                 st.markdown("---")
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (REŠENO KAŠNJENJE I DODAT EXCEL FILTER) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sezona: {izabrana_sezona}")
     
@@ -232,71 +224,103 @@ elif meni == "Evidencija izlaza (Po danima)":
     if not sve_sifre:
         st.info(f"Nema unete robe u sezoni {izabrana_sezona} da biste zabeležili izlaz.")
     else:
-        with st.form("forma_izlaz"):
-            col1, col2 = st.columns(2)
+        # Rešavanje kašnjenja: Izbacujemo klasičan st.form da bi se selektori osvežavali u sekundi
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
             
-            with col1:
-                izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now())
-                izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre)
-                
-                conn = sqlite3.connect("magacin.db")
-                cursor = conn.cursor()
-                cursor.execute("SELECT boja FROM artikli WHERE sifra = ? AND sezona = ?", (izabrana_sifra, izabrana_sezona))
-                dostupne_boje = [red[0] for red in cursor.fetchall()]
-                conn.close()
-                
-                izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje)
+            # Prvi selektor: Šifra
+            izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
             
-            with col2:
+            # Odmah vučemo sve unete boje iz baze za tu šifru bez keširanja
+            conn = sqlite3.connect("magacin.db")
+            cursor = conn.cursor()
+            cursor.execute("SELECT boja FROM artikli WHERE sifra = ? AND sezona = ?", (izabrana_sifra, izabrana_sezona))
+            dostupne_boje = [red[0] for red in cursor.fetchall()]
+            conn.close()
+            
+            # Drugi selektor: Boja (Automatski dobija tačne boje)
+            izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje, key="izlaz_boja_select")
+        
+        with col2:
+            # Traženje trenutnog stanja direktno iz baze na osnovu izabrane šifre i boje
+            trenutno_na_stanju = 0
+            if izabrana_boja:
                 conn = sqlite3.connect("magacin.db")
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
-                trenutno_na_stanju = cursor.fetchone()[0]
+                rezultat = cursor.fetchone()
+                if rezultat:
+                    trenutno_na_stanju = rezultat[0]
+                conn.close()
+            
+            st.write("")
+            # Plavo polje (Sijalica) se sada osvežava u realnom vremenu čim klikneš na novu šifru/boju
+            st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
+            
+            kolicina_izlaza = st.number_input("Koliko pari izlazi iz magacina:", min_value=1, max_value=max(1, trenutno_na_stanju), step=1, key="izlaz_kolicina_input")
+        
+        # Dugme za slanje je sada samostalno
+        if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz"):
+            if trenutno_na_stanju < kolicina_izlaza or trenutno_na_stanju == 0:
+                st.error("Greška: Nemate dovoljno pari na stanju ili boja nije pravilno izabrana!")
+            else:
+                conn = sqlite3.connect("magacin.db")
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
+                    VALUES (?, ?, ?, ?)
+                ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
+                
+                novo_stanje = trenutno_na_stanju - kolicina_izlaza
+                cursor.execute('''
+                    UPDATE artikli SET broj_pari = ? WHERE sifra = ? AND boja = ? AND sezona = ?
+                ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
+                
+                conn.commit()
                 conn.close()
                 
-                st.write("")
-                st.info(f"💡 Trenutno stanje za {izabrana_sifra} ({izabrana_boja}) je: **{trenutno_na_stanju} pari**")
-                kolicina_izlaza = st.number_input("Koliko pari izlazi iz magacina:", min_value=1, max_value=max(1, trenutno_na_stanju), step=1, key="izlaz_kolicina_input")
-            
-            dugme_izlaz = st.form_submit_button("Zapiši izlaz robe")
-            
-            if dugme_izlaz:
-                if trenutno_na_stanju < kolicina_izlaza:
-                    st.error("Greška: Nemate dovoljno pari na stanju!")
-                else:
-                    conn = sqlite3.connect("magacin.db")
-                    cursor = conn.cursor()
-                    
-                    cursor.execute('''
-                        INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
-                        VALUES (?, ?, ?, ?)
-                    ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
-                    
-                    novo_stanje = trenutno_na_stanju - kolicina_izlaza
-                    cursor.execute('''
-                        UPDATE artikli SET broj_pari = ? WHERE sifra = ? AND boja = ? AND sezona = ?
-                    ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
-                    
-                    conn.commit()
-                    conn.close()
-                    
-                    st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
-                    st.rerun()
+                st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
+                st.rerun()
 
-        # Istorija i izvoz istorije u Excel
-        st.subheader("📋 Istorija dnevnih izlaza robe (Sve sezone)")
+        st.markdown("---")
+        
+        # --- NOVI DEO: FILTER DATUMA ZA ISTORIJU I EXCEL ---
+        st.subheader("📋 Istorija dnevnih izlaza robe")
+        
         conn = sqlite3.connect("magacin.db")
-        df_izlazi = pd.read_sql_query("SELECT datum AS 'Datum', sifra_artikla AS 'Šifra modela', boja_artikla AS 'Boja', kolicina_izlaz AS 'Izašlo (pari)' FROM izlaz_robe ORDER BY id DESC", conn)
+        df_izlazi = pd.read_sql_query("SELECT datum AS 'Datum', sifra_artikla AS 'Šifra modela', boja_artikla AS 'Boja', kolicina_izlaz AS 'Izašlo (pari)' FROM izlaz_robe ORDER BY Datum DESC, id DESC", conn)
         conn.close()
         
         if not df_izlazi.empty:
-            excel_izlazi = konvertuj_u_excel(df_izlazi)
+            # Polja za izbor perioda za izvoz
+            st.write("📅 **Izaberi period za preuzimanje Excel tabele:**")
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                od_datuma = st.date_input("Od datuma:", datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d") if not df_izlazi.empty else datetime.now())
+            with col_d2:
+                do_datuma = st.date_input("Do datuma:", datetime.now())
+            
+            # Filtriranje tabele na osnovu izabranih datuma
+            od_str = od_datuma.strftime("%Y-%m-%d")
+            do_str = do_datuma.strftime("%Y-%m-%d")
+            
+            df_filtrirano = df_izlazi[(df_izlazi['Datum'] >= od_str) & (df_izlazi['Datum'] <= do_str)]
+            
+            # Zeleno dugme generiše Excel samo za filtrirani period
+            excel_izlazi = konvertuj_u_excel(df_filtrirano)
             st.download_button(
-                label="🟢 Preuzmi celu istoriju izlaza kao Excel",
+                label=f"🟢 Preuzmi Excel za period ({od_datuma.strftime('%d.%m.%Y.')} - {do_datuma.strftime('%d.%m.%Y.')})",
                 data=excel_izlazi,
-                file_name=f"istorija_izlaza_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                file_name=f"izlazi_robe_{od_str}_do_{do_str}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dugme_download_excel_izlazi"
             )
+            
+            # Na ekranu prikazujemo tabelu (kompletnu ili filtriranu po želji)
+            st.write("Prikaz svih zabeleženih izlaza:")
             st.dataframe(df_izlazi, use_container_width=True)
         else:
             st.write("Još uvek nema zabeleženih izlaza robe.")
