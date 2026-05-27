@@ -56,6 +56,34 @@ def kreiraj_bazu():
 
 kreiraj_bazu()
 
+# =====================================================================
+# 🚨 PRIVREMENI KOD ZA PRAŽNJENJE TEST PODATAKA 🚨
+# (Ovaj blok koda briše artikle i izlaze, i briše stare slike iz foldera)
+def isprazni_test_podatke():
+    conn = sqlite3.connect("magacin.db")
+    cursor = conn.cursor()
+    
+    # Brišemo sve iz tabele artikala i izlaza
+    cursor.execute("DELETE FROM artikli")
+    cursor.execute("DELETE FROM izlaz_robe")
+    
+    conn.commit()
+    conn.close()
+    
+    # Brišemo fizičke slike iz foldera da ne zauzimaju prostor na serveru
+    if os.path.exists("slike_modela"):
+        for fajl in os.listdir("slike_modela"):
+            putanja = os.path.join("slike_modela", fajl)
+            try:
+                if os.path.isfile(putanja):
+                    os.remove(putanja)
+            except:
+                pass
+
+# Pokrećemo brisanje
+isprazni_test_podatke()
+# =====================================================================
+
 if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
 
@@ -108,7 +136,6 @@ st.markdown("""
     .stAlert p {
         font-size: 0.85rem !important;
     }
-    /* Smanjujemo font unutar ekspandera za sliku da bude diskretan */
     .stExpander p {
         font-size: 0.8rem !important;
     }
@@ -249,12 +276,11 @@ elif meni == "Trenutno stanje":
                 ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
                 
                 with st.container():
-                    col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5]) # Blago proširena kolona za sliku radi stabilnosti menija
+                    col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
                     
                     with col_slika:
                         if trenutna_slika and os.path.exists(trenutna_slika):
                             st.image(trenutna_slika, width=120)
-                            # NOVO: Dodat ekspander za klik-uvećanje slike u punu veličinu
                             with st.expander("🔍 Vidi veliku sliku"):
                                 st.image(trenutna_slika, use_container_width=True)
                         else:
@@ -359,7 +385,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    trenutno_na_stanju = resultado_stanje = rezultat[0]
+                    trenutno_na_stanju = rezultat[0]
                 conn.close()
             
             st.write("")
