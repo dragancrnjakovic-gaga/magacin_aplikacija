@@ -271,7 +271,7 @@ elif meni == "Trenutno stanje":
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
-                                    finalna_putanja_slike = trenutna_slika
+                                    finalna_putanja_slike = trenches_slika = trenutna_slika
                                     
                                     if nova_slika_file is not None:
                                         if trenutna_slika and os.path.exists(trenutna_slika):
@@ -326,74 +326,74 @@ elif meni == "Evidencija izlaza (Po danima)":
     if not sve_sifre:
         st.info(f"Nema unete robe u sezoni {izabrana_sezona} da biste zabeležili izlaz.")
     else:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
-            izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
+        # PROMENJENO: Ceo unos pakujemo u formu sa clear_on_submit=True
+        with st.form("forma_za_izlaz", clear_on_submit=True):
+            col1, col2 = st.columns(2)
             
-            conn = sqlite3.connect("magacin.db")
-            cursor = conn.cursor()
-            cursor.execute("SELECT boja FROM artikli WHERE sifra = ? AND sezona = ?", (izabrana_sifra, izabrana_sezona))
-            dostupne_boje = [red[0] for red in cursor.fetchall()]
-            conn.close()
-            
-            izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje, key="izlaz_boja_select")
-        
-        with col2:
-            trenutno_na_stanju = 0
-            if izabrana_boja:
+            with col1:
+                izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
+                izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
+                
                 conn = sqlite3.connect("magacin.db")
                 cursor = conn.cursor()
-                cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
-                rezultat = cursor.fetchone()
-                if rezultat:
-                    trenutno_na_stanju = rezultat[0]
-                conn.close()
-            
-            st.write("")
-            st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
-            
-            # ISPRAVLJENO: Koristimo ključ koji ima jedinstveni sufiks na osnovu šifre i boje kako bismo bezbedno kontrolisali resetovanje
-            kljuc_kolicine = f"kolicina_{izabrana_sifra}_{izabrana_boja}"
-            
-            kolicina_izlaza = st.number_input(
-                "Koliko pari izlazi iz magacina:", 
-                min_value=1, 
-                max_value=max(1, trenutno_na_stanju), 
-                step=1, 
-                value=None, 
-                key=kljuc_kolicine
-            )
-        
-        dugme_onemoguceno = kolicina_izlaza is None or kolicina_izlaza <= 0
-        
-        if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz", disabled=dugme_onemoguceno):
-            if kolicina_izlaza is None or trenutno_na_stanju < kolicina_izlaza or trenutno_na_stanju == 0:
-                st.error("Greška: Nemate dovoljno pari na stanju ili niste uneli količinu!")
-            else:
-                conn = sqlite3.connect("magacin.db")
-                cursor = conn.cursor()
-                
-                cursor.execute('''
-                    INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
-                    VALUES (?, ?, ?, ?)
-                ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
-                
-                novo_stanje = trenutno_na_stanju - kolicina_izlaza
-                cursor.execute('''
-                    UPDATE artikli SET broj_pari = ? WHERE sifra = ? AND boja = ? AND sezona = ?
-                ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
-                
-                conn.commit()
+                cursor.execute("SELECT boja FROM artikli WHERE sifra = ? AND sezona = ?", (izabrana_sifra, izabrana_sezona))
+                dostupne_boje = [red[0] for red in cursor.fetchall()]
                 conn.close()
                 
-                # ISPRAVLJENO: Umesto direktnog dodeljivanja None, koristimo del() i st.rerun() da primoramo Streamlit da ponovo iscrta čisto polje
-                if kljuc_kolicine in st.session_state:
-                    del st.session_state[kljuc_kolicine]
+                izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje, key="izlaz_boja_select")
+            
+            with col2:
+                trenutno_na_stanju = 0
+                if izabrana_boja:
+                    conn = sqlite3.connect("magacin.db")
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
+                    rezultat = cursor.fetchone()
+                    if resultado:
+                        trenutno_na_stanju = rezultat[0]
+                    elif rezultat:
+                        trenutno_na_stanju = rezultat[0]
+                    conn.close()
                 
-                st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
-                st.rerun()
+                st.write("")
+                st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
+                
+                kolicina_izlaza = st.number_input(
+                    "Koliko pari izlazi iz magacina:", 
+                    min_value=1, 
+                    max_value=max(1, trenutno_na_stanju), 
+                    step=1, 
+                    value=None, 
+                    key="izlaz_kolicina_input_final"
+                )
+            
+            # Form submit button
+            dugme_potvrdi_izlaz = st.form_submit_button("Zapiši izlaz robe", type="primary")
+            
+            if dugme_potvrdi_izlaz:
+                if kolicina_izlaza is None or kolicina_izlaza <= 0:
+                    st.error("Greška: Niste uneli ispravnu količinu!")
+                elif trenutno_na_stanju < kolicina_izlaza or trenutno_na_stanju == 0:
+                    st.error("Greška: Nemate dovoljno pari na stanju!")
+                else:
+                    conn = sqlite3.connect("magacin.db")
+                    cursor = conn.cursor()
+                    
+                    cursor.execute('''
+                        INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
+                        VALUES (?, ?, ?, ?)
+                    ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
+                    
+                    novo_stanje = trenutno_na_stanju - kolicina_izlaza
+                    cursor.execute('''
+                        UPDATE artikli SET broj_pari = ? WHERE sifra = ? AND boja = ? AND sezona = ?
+                    ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
+                    
+                    conn.commit()
+                    conn.close()
+                    
+                    st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
+                    st.rerun()
 
         st.markdown("---")
         
