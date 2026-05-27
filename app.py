@@ -57,29 +57,27 @@ def konvertuj_u_excel(df):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
-# --- POPRAVLJENI CSS (Bez isecanja naslova) ---
+# --- NOVI SIGURNI CSS (Bez pomeranja čitave stranice nagore) ---
 st.markdown("""
     <style>
-    /* Smanjivanje praznog prostora na vrhu stranice */
+    /* Vraćamo normalan gornji razmak stranice da naslovi NE bi bili isečeni */
     .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 1rem !important;
+        padding-top: 3.5rem !important;
+        padding-bottom: 2rem !important;
     }
     
-    /* Glavni naslov - normalna margina, smanjen padding */
+    /* Glavni naslov - uklonjen padding da ne zauzima previše mesta, ali je na bezbednom mestu */
     h1 {
         font-size: 1.8rem !important;
-        padding-top: 0px !important;
-        padding-bottom: 5px !important;
-        margin-top: 0px !important;
+        padding-bottom: 10px !important;
+        margin: 0px !important;
     }
     
-    /* Podnaslovi sekcija - normalna margina, smanjen padding */
+    /* Podnaslovi sekcija */
     h2 {
         font-size: 1.35rem !important;
-        padding-top: 0px !important;
-        padding-bottom: 10px !important;
-        margin-top: 0px !important;
+        padding-bottom: 15px !important;
+        margin: 0px !important;
     }
     
     /* Naziv artikla na stranici Stanje (Šifra modela i Boja) */
@@ -299,7 +297,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
-                if rezultat:
+                if resultado = rezultat:
                     trenutno_na_stanju = rezultat[0]
                 conn.close()
             
