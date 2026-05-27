@@ -10,6 +10,7 @@ def kreiraj_bazu():
     conn = sqlite3.connect("magacin.db")
     cursor = conn.cursor()
     
+    # Tabela za artikle
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS artikli (
             sifra TEXT,
@@ -29,6 +30,7 @@ def kreiraj_bazu():
     except sqlite3.OperationalError:
         pass
         
+    # Tabela za izlaz robe
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS izlaz_robe (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +41,20 @@ def kreiraj_bazu():
             FOREIGN KEY (sifra_artikla, boja_artikla) REFERENCES artikli (sifra, boja)
         )
     ''')
+    
+    # NOVA TABELA: Samo za čuvanje predefinisanih boja
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sifrarnik_boja (
+            boja TEXT PRIMARY KEY
+        )
+    ''')
+    
+    # Ubacujemo nekoliko osnovnih boja automatski ako je tabela prazna
+    cursor.execute("SELECT COUNT(*) FROM sifrarnik_boja")
+    if cursor.fetchone()[0] == 0:
+        pocetne_boje = [("Black",), ("Blue",), ("Red",), ("Gray",), ("White",), ("Beige",)]
+        cursor.executemany("INSERT INTO sifrarnik_boja (boja) VALUES (?)", pocetne_boje)
+        
     conn.commit()
     conn.close()
 
@@ -46,6 +62,15 @@ kreiraj_bazu()
 
 if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
+
+# Pomoćna funkcija za dobijanje liste boja iz baze
+def ucitaj_boje():
+    conn = sqlite3.connect("magacin.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
+    boje = [red[0] for red in cursor.fetchall()]
+    conn.close()
+    return boje
 
 # Pomoćna funkcija za Excel
 def konvertuj_u_excel(df):
@@ -57,49 +82,35 @@ def konvertuj_u_excel(df):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
-# --- CSS (Bez pomeranja čitave stranice nagore, naslovi su sigurni) ---
 st.markdown("""
     <style>
-    /* Normalan gornji razmak stranice da naslovi NE bi bili isečeni */
     .block-container {
         padding-top: 3.5rem !important;
         padding-bottom: 2rem !important;
     }
-    
-    /* Glavni naslov */
     h1 {
         font-size: 1.8rem !important;
         padding-bottom: 10px !important;
         margin: 0px !important;
     }
-    
-    /* Podnaslovi sekcija */
     h2 {
         font-size: 1.35rem !important;
         padding-bottom: 15px !important;
         margin: 0px !important;
     }
-    
-    /* Naziv artikla na stranici Stanje (Šifra modela i Boja) */
     h3 {
         font-size: 1.05rem !important;
         font-weight: bold !important;
     }
-    
-    /* Veličina tekstualnog prikaza i brojki unutar detalja artikla */
     [data-testid="stMetricValue"] {
         font-size: 1.05rem !important;
     }
     [data-testid="stMetricLabel"] {
         font-size: 0.75rem !important;
     }
-    
-    /* Smanjivanje običnog teksta i labela u formama */
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p {
         font-size: 0.85rem !important;
     }
-    
-    /* Smanjivanje teksta unutar plavih/zelenih info polja */
     .stAlert p {
         font-size: 0.85rem !important;
     }
@@ -121,13 +132,16 @@ st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 if meni == "Unos nove robe":
     st.header(f"➕ Unos novog artikla ({izabrana_sezona})")
     
+    # Učitavamo trenutne boje iz baze za padajući meni
+    lista_boja = ucitaj_boje()
+    
     with st.form("forma_za_unos", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
         with col1:
             sifra = st.text_input("Šifra modela:").strip().upper()
-            boja = st.text_input("Boja modela:").strip().capitalize()
-            # PROMENJENO: "Broj pari:" je sada "Količina pari:"
+            # PROMENJENO: Umesto slobodnog unosa teksta, sada je st.selectbox (padajući meni)
+            boja = st.selectbox("Boja modela:", lista_boja)
             broj_pari = st.number_input("Količina pari:", min_value=0, step=1)
             pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1)
             
@@ -139,7 +153,7 @@ if meni == "Unos nove robe":
         dugme_potvrdi = st.form_submit_button("Sačuvaj artikal u bazu")
         
         if dugme_potvrdi:
-            if sifra == "" or boja == "":
+            if sifra == "" or boja is None or boja == "":
                 st.error("Greška: Šifra i boja ne smeju biti prazne!")
             else:
                 putanja_slike = ""
@@ -162,6 +176,32 @@ if meni == "Unos nove robe":
                     st.rerun()
                 except sqlite3.IntegrityError:
                     st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
+
+    # NOVI DEO: Mini-sekcija ispod forme za dodavanje potpuno novih boja
+    st.markdown("---")
+    st.subheader("🎨 Upravljanje listom boja")
+    col_nova_boja, col_dugme_boja = st.columns([3, 1])
+    
+    with col_nova_boja:
+        nova_boja_unos = st.text_input("Unesi naziv nove boje (npr. Zelena, Camel, Pink):", "").strip().capitalize()
+    
+    with col_dugme_boja:
+        st.write("") # Malo prostora da se poravna sa poljem
+        st.write("") 
+        if st.button("➕ Dodaj boju u listu"):
+            if nova_boja_unos == "":
+                st.error("Polje za novu boju ne može biti prazno!")
+            else:
+                try:
+                    conn = sqlite3.connect("magacin.db")
+                    cursor = conn.cursor()
+                    cursor.execute("INSERT INTO sifrarnik_boja (boja) VALUES (?)", (nova_boja_unos,))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"Boja '{nova_boja_unos}' je dodata u meni!")
+                    st.rerun()
+                except sqlite3.IntegrityError:
+                    st.warning(f"Boja '{nova_boja_unos}' već postoji u listi.")
 
 # --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
@@ -299,7 +339,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    # ISPRAVLJENO: Sklonjena loša linija koda koja je pravila SyntaxError
                     trenutno_na_stanju = rezultat[0]
                 conn.close()
             
