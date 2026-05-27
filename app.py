@@ -108,6 +108,10 @@ st.markdown("""
     .stAlert p {
         font-size: 0.85rem !important;
     }
+    /* Smanjujemo font unutar ekspandera za sliku da bude diskretan */
+    .stExpander p {
+        font-size: 0.8rem !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -245,11 +249,14 @@ elif meni == "Trenutno stanje":
                 ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
                 
                 with st.container():
-                    col_slika, col_detalji, col_akcije = st.columns([1, 3, 1.5])
+                    col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5]) # Blago proširena kolona za sliku radi stabilnosti menija
                     
                     with col_slika:
                         if trenutna_slika and os.path.exists(trenutna_slika):
                             st.image(trenutna_slika, width=120)
+                            # NOVO: Dodat ekspander za klik-uvećanje slike u punu veličinu
+                            with st.expander("🔍 Vidi veliku sliku"):
+                                st.image(trenutna_slika, use_container_width=True)
                         else:
                             st.write("❌ Nema slike")
                             
@@ -330,14 +337,12 @@ elif meni == "Evidencija izlaza (Po danima)":
     if not sve_sifre:
         st.info(f"Nema unete robe u sezoni {izabrana_sezona} da biste zabeležili izlaz.")
     else:
-        # PREDIVNA DINAMIČKA POLJA (Bez forme - sve se osvežava u realnom vremenu!)
         col1, col2 = st.columns(2)
         
         with col1:
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
             
-            # Povlačimo samo boje koje STVARNO POSTOJE za izabranu šifru u toj sezoni
             conn = sqlite3.connect("magacin.db")
             cursor = conn.cursor()
             cursor.execute("SELECT boja FROM artikli WHERE sifra = ? AND sezona = ?", (izabrana_sifra, izabrana_sezona))
@@ -354,14 +359,12 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    trenutno_na_stanju = rezultat[0]
+                    trenutno_na_stanju = resultado_stanje = rezultat[0]
                 conn.close()
             
             st.write("")
-            # Plavo polje sa sijalicom se sada trenutno i automatski osvežava čim se promeni šifra ili boja!
             st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
             
-            # REŠENJE ZA ČIŠĆENJE BROJA: Koristimo promenljivi ključ koji potpuno briše staru vrednost iz keša pretraživača
             dinamicki_kljuc = f"izlaz_pari_input_{st.session_state['reset_brojac']}"
             
             kolicina_izlaza = st.number_input(
@@ -369,11 +372,10 @@ elif meni == "Evidencija izlaza (Po danima)":
                 min_value=1, 
                 max_value=max(1, trenutno_na_stanju), 
                 step=1, 
-                value=None,  # Polje počinje kao potpuno prazno!
+                value=None, 
                 key=dinamicki_kljuc
             )
         
-        # Dugme je onemogućeno sve dok korisnik ne upiše broj u polje (onemogućava slučajne greške)
         dugme_onemoguceno = kolicina_izlaza is None or kolicina_izlaza <= 0
         
         if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz", disabled=dugme_onemoguceno):
@@ -396,7 +398,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                 conn.commit()
                 conn.close()
                 
-                # Menjamo broj u memoriji -> to automatski tera polje za količinu da se potpuno resetuje na prazno (None)
                 st.session_state["reset_brojac"] += 1
                 
                 st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
