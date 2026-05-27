@@ -266,7 +266,6 @@ elif meni == "Trenutno stanje":
                             nova_p_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, value=float(row['prodajna_cena']), step=50.0, key=f"pc_{kljuc_id}")
                             nova_i_cena = st.number_input("Internet cena (RSD):", min_value=0.0, value=float(row['internet_cena']), step=50.0, key=f"ic_{kljuc_id}")
                             
-                            # PROMENJENO: Dodato polje za zamenu slike unutar izmena
                             nova_slika_file = st.file_uploader("Zameni sliku artikla:", type=["jpg", "jpeg", "png"], key=f"img_{kljuc_id}")
                             
                             col_b1, col_b2 = st.columns(2)
@@ -274,16 +273,13 @@ elif meni == "Trenutno stanje":
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
                                     finalna_putanja_slike = trenutna_slika
                                     
-                                    # Ako je ubačena nova slika, obrađujemo je
                                     if nova_slika_file is not None:
-                                        # Prvo obrišemo staru sliku sa diska ako postoji
                                         if trenutna_slika and os.path.exists(trenutna_slika):
                                             try:
                                                 os.remove(trenutna_slika)
                                             except:
                                                 pass
                                         
-                                        # Sačuvamo novu sliku
                                         ekstenzija = nova_slika_file.name.split(".")[-1]
                                         finalna_putanja_slike = f"slike_modela/{sif}_{boj}.{ekstenzija}"
                                         with open(finalna_putanja_slike, "wb") as f:
@@ -381,6 +377,10 @@ elif meni == "Evidencija izlaza (Po danima)":
                 
                 conn.commit()
                 conn.close()
+                
+                # PROMENJENO: Pre osvežavanja, čistimo uneti broj iz memorije (session_state)
+                if "izlaz_kolicina_input" in st.session_state:
+                    st.session_state["izlaz_kolicina_input"] = None
                 
                 st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
                 st.rerun()
