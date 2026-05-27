@@ -57,35 +57,50 @@ def konvertuj_u_excel(df):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
-# --- CSS za smanjivanje naslova i teksta ---
+# --- CSS za napredno doterivanje izgleda ---
 st.markdown("""
     <style>
-    /* Smanjivanje glavnog naslova na vrhu */
+    /* Smanjivanje gornje margine da se naslovi pomere na gore */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    /* Smanjivanje glavnog naslova na vrhu i pomeranje nagore */
     h1 {
         font-size: 1.8rem !important;
-        padding-bottom: 10px;
+        padding-bottom: 5px !important;
+        margin-top: -15px !important;
     }
-    /* Smanjivanje podnaslova (unutar opcija) */
+    /* Smanjivanje podnaslova sekcija i pomeranje nagore */
     h2 {
         font-size: 1.4rem !important;
+        margin-top: -10px !important;
+        padding-bottom: 10px !important;
     }
     /* Smanjivanje naziva artikla na stranici Stanje */
     h3 {
-        font-size: 1.1rem !important;
+        font-size: 1.05rem !important;
         font-weight: bold !important;
+    }
+    /* Dodatno smanjivanje tekstualnog prikaza i metrika na stranici Stanje */
+    [data-testid="stMetricValue"] {
+        font-size: 1.1rem !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.75rem !important;
     }
     /* Smanjivanje običnog teksta i labela u formama */
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p {
-        font-size: 0.9rem !important;
+        font-size: 0.85rem !important;
     }
     /* Smanjivanje teksta unutar tabela i info polja */
     .stAlert p {
-        font-size: 0.9rem !important;
+        font-size: 0.85rem !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Glavni naslov (sada je manji zahvaljujući CSS-u)
+# Glavni naslov
 st.title("📦 Sistem za praćenje stanja u magacinu")
 
 # 1. SEZONA
@@ -106,7 +121,8 @@ if meni == "Unos nove robe":
         with col1:
             sifra = st.text_input("Šifra modela:").strip().upper()
             boja = st.text_input("Boja modela:").strip().capitalize()
-            broj_pari = st.number_input("Trenutni broj pari na stanju:", min_value=0, step=1)
+            # PROMENJENO: Tekst "Trenutni broj pari na stanju:" zamenjen sa "Broj pari:"
+            broj_pari = st.number_input("Broj pari:", min_value=0, step=1)
             pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1)
             
         with col2:
@@ -141,7 +157,7 @@ if meni == "Unos nove robe":
                 except sqlite3.IntegrityError:
                     st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
 
-# --- OPCIJA 2: TRENUTNO STANJE (SA SMANJENIM TEKSTOM I "ŠIFRA MODELA:") ---
+# --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sezona: {izabrana_sezona}")
     
@@ -198,9 +214,9 @@ elif meni == "Trenutno stanje":
                             st.write("❌ Nema slike")
                             
                     with col_detalji:
-                        # PROMENJENO: Umesto "Model:" sada piše "Šifra modela:"
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         
+                        # Brojke (metrike) su sada znatno manje zahvaljujući CSS-u na vrhu
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
                         c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
@@ -278,7 +294,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    trenutno_na_stanju = resultado = rezultat[0]
+                    # ISPRAVLJENO: Sklonjen višak koda koji je mogao da pravi grešku
+                    trenutno_na_stanju = rezultat[0]
                 conn.close()
             
             st.write("")
