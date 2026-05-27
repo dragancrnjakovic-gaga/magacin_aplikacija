@@ -57,43 +57,51 @@ def konvertuj_u_excel(df):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
-# --- CSS za napredno doterivanje izgleda ---
+# --- POPRAVLJENI CSS (Bez isecanja naslova) ---
 st.markdown("""
     <style>
-    /* Smanjivanje gornje margine da se naslovi pomere na gore */
+    /* Smanjivanje praznog prostora na vrhu stranice */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 1.5rem !important;
         padding-bottom: 1rem !important;
     }
-    /* Smanjivanje glavnog naslova na vrhu i pomeranje nagore */
+    
+    /* Glavni naslov - normalna margina, smanjen padding */
     h1 {
         font-size: 1.8rem !important;
+        padding-top: 0px !important;
         padding-bottom: 5px !important;
-        margin-top: -15px !important;
+        margin-top: 0px !important;
     }
-    /* Smanjivanje podnaslova sekcija i pomeranje nagore */
+    
+    /* Podnaslovi sekcija - normalna margina, smanjen padding */
     h2 {
-        font-size: 1.4rem !important;
-        margin-top: -10px !important;
+        font-size: 1.35rem !important;
+        padding-top: 0px !important;
         padding-bottom: 10px !important;
+        margin-top: 0px !important;
     }
-    /* Smanjivanje naziva artikla na stranici Stanje */
+    
+    /* Naziv artikla na stranici Stanje (Šifra modela i Boja) */
     h3 {
         font-size: 1.05rem !important;
         font-weight: bold !important;
     }
-    /* Dodatno smanjivanje tekstualnog prikaza i metrika na stranici Stanje */
+    
+    /* Veličina tekstualnog prikaza i brojki unutar detalja artikla */
     [data-testid="stMetricValue"] {
-        font-size: 1.1rem !important;
+        font-size: 1.05rem !important;
     }
     [data-testid="stMetricLabel"] {
         font-size: 0.75rem !important;
     }
+    
     /* Smanjivanje običnog teksta i labela u formama */
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p {
         font-size: 0.85rem !important;
     }
-    /* Smanjivanje teksta unutar tabela i info polja */
+    
+    /* Smanjivanje teksta unutar plavih/zelenih info polja */
     .stAlert p {
         font-size: 0.85rem !important;
     }
@@ -121,7 +129,6 @@ if meni == "Unos nove robe":
         with col1:
             sifra = st.text_input("Šifra modela:").strip().upper()
             boja = st.text_input("Boja modela:").strip().capitalize()
-            # PROMENJENO: Tekst "Trenutni broj pari na stanju:" zamenjen sa "Broj pari:"
             broj_pari = st.number_input("Broj pari:", min_value=0, step=1)
             pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1)
             
@@ -216,7 +223,6 @@ elif meni == "Trenutno stanje":
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         
-                        # Brojke (metrike) su sada znatno manje zahvaljujući CSS-u na vrhu
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
                         c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
@@ -294,7 +300,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = ? AND boja = ? AND sezona = ?", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    # ISPRAVLJENO: Sklonjen višak koda koji je mogao da pravi grešku
                     trenutno_na_stanju = rezultat[0]
                 conn.close()
             
