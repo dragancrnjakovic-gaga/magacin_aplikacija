@@ -56,8 +56,6 @@ def kreiraj_bazu():
 
 kreiraj_bazu()
 
-
-
 if not os.path.exists("slike_modela"):
     os.makedirs("slike_modela")
 
@@ -405,14 +403,27 @@ elif meni == "Evidencija izlaza (Po danima)":
 
         st.markdown("---")
         
-        st.subheader("📋 Istorija dnevnih izlaza robe")
+        # --- FILTRIRANA ISTORIJA IZLAZA PO SEZONAMA ---
+        st.subheader(f"📋 Istorija dnevnih izlaza robe za sezonu: {izabrana_sezona}")
         
         conn = sqlite3.connect("magacin_glavni.db")
-        df_izlazi = pd.read_sql_query("SELECT datum AS 'Datum', sifra_artikla AS 'Šifra modela', boja_artikla AS 'Boja', kolicina_izlaz AS 'Izašlo (pari)' FROM izlaz_robe ORDER BY id ASC", conn)
+        # SQL magija: Spajamo izlaze sa tabelom artikala da bismo filtrirali samo one koji pripadaju aktivnoj sezoni
+        upit_istorija = '''
+            SELECT 
+                ir.datum AS 'Datum', 
+                ir.sifra_artikla AS 'Šifra modela', 
+                ir.boja_artikla AS 'Boja', 
+                ir.kolicina_izlaz AS 'Izašlo (pari)' 
+            FROM izlaz_robe ir
+            INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
+            WHERE a.sezona = ?
+            ORDER BY ir.id ASC
+        '''
+        df_izlazi = pd.read_sql_query(upit_istorija, conn, params=(izabrana_sezona,))
         conn.close()
         
         if not df_izlazi.empty:
-            st.write("📅 **Izaberi period za preuzimanje Excel tabele:**")
+            st.write(f"📅 **Izaberi period za preuzimanje Excel tabele ({izabrana_sezona}):**")
             col_d1, col_d2 = st.columns(2)
             with col_d1:
                 od_datuma = st.date_input("Od datuma:", datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d") if not df_izlazi.empty else datetime.now())
@@ -428,12 +439,12 @@ elif meni == "Evidencija izlaza (Po danima)":
             st.download_button(
                 label=f"🟢 Preuzmi Excel za period ({od_datuma.strftime('%d.%m.%Y.')} - {do_datuma.strftime('%d.%m.%Y.')})",
                 data=excel_izlazi,
-                file_name=f"izlazi_robe_{od_str}_do_{do_str}.xlsx",
+                file_name=f"izlazi_robe_{izabrana_sezona}_{od_str}_do_{do_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dugme_download_excel_izlazi"
             )
             
-            st.write("Prikaz svih zabeleženih izlaza:")
+            st.write(f"Prikaz izlaza za sezonu **{izabrana_sezona}**:")
             st.dataframe(df_izlazi, use_container_width=True)
         else:
-            st.write("Još uvek nema zabeleženih izlaza robe.")
+            st.write(f"Još uvek nema zabeleženih izlaza robe za sezonu {izabrana_sezona}.")
