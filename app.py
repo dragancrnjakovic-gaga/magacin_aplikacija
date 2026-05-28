@@ -145,10 +145,14 @@ if meni == "Unos nove robe":
                         try:
                             # Slanje fajla direktno na internet u folder "magacin"
                             rezultat_slike = cloudinary.uploader.upload(
-                                slika, 
-                                folder="magacin/",
-                                public_id=f"{sifra}_{boja}"
-                            )
+    slika, 
+    folder="magacin/",
+    public_id=f"{sifra}_{boja}",
+    transformation=[
+        {"width": 800, "crop": "limit"}, # Smanjuje sliku na max 800px širine samo ako je veća
+        {"quality": "auto", "fetch_format": "auto"} # Automatski kompresuje i bira najlakši format (npr. WebP)
+    ]
+)
                             url_slike = resultado_slike = rezultat_slike["secure_url"]
                         except Exception as e:
                             st.error(f"Greška pri slanju slike: {e}")
@@ -267,10 +271,14 @@ elif meni == "Trenutno stanje":
                                         with st.spinner("Menjanje slike..."):
                                             try:
                                                 rez_nove_slike = cloudinary.uploader.upload(
-                                                    nova_slika_file,
-                                                    folder="magacin/",
-                                                    public_id=f"{sif}_{boj}"
-                                                )
+    nova_slika_file,
+    folder="magacin/",
+    public_id=f"{sif}_{boj}",
+    transformation=[
+        {"width": 800, "crop": "limit"},
+        {"quality": "auto", "fetch_format": "auto"}
+    ]
+)
                                                 finalna_putanja_slike = rez_nove_slike["secure_url"]
                                             except:
                                                 pass
