@@ -257,11 +257,11 @@ with col_detalji:
         disabled=False, 
         label_visibility="visible"
     )
-                        c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
-                        c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
-                        c3.metric("Prodajna", f"{row['prodajna_cena']} din")
-                        c4.metric("Internet", f"{row['internet_cena']} din")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
+    c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
+    c3.metric("Prodajna", f"{row['prodajna_cena']} din")
+    c4.metric("Internet", f"{row['internet_cena']} din")
                         
                     with col_akcije:
                         ekspander = st.expander("🛠️ Izmeni / Obriši")
