@@ -241,13 +241,7 @@ elif meni == "Trenutno stanje":
                             st.write("❌ Nema slike")
                             
                     with col_detalji:
-                        st.text_input(
-                            label=f"🎨 Boja artikla: {boj}", 
-                            value=sif, 
-                            key=f"copy_{kljuc_id}", 
-                            disabled=False, 
-                            label_visibility="visible"
-                        )
+                        st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
                         c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
