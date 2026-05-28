@@ -64,6 +64,9 @@ def kreiraj_tabele():
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
+# --- ⚡ OPTIMIZACIJA: KEŠIRANJE ŠIFRARNIKA BOJA ⚡ ---
+# ttl=600 znači da aplikacija pamti boje u memoriji 10 minuta, pre nego što opet pita bazu
+@st.cache_data(ttl=600)
 def ucitaj_boje():
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
@@ -180,6 +183,8 @@ if meni == "Unos nove robe":
                     cursor.execute("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", (nova_boja_unos,))
                     conn.commit()
                     conn.close()
+                    # ⚡ Čistimo keš za boje da bi aplikacija odmah videla novu boju
+                    ucitaj_boje.clear()
                     st.success(f"Boja '{nova_boja_unos}' je dodata!")
                     st.rerun()
                 except psycopg2.IntegrityError:
@@ -304,9 +309,10 @@ elif meni == "Trenutno stanje":
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sezona: {izabrana_sezona}")
     
+    # ⚡ Povlačimo samo jedinstvene šifre iz trenutne sezone
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT sifra FROM artikli WHERE sezona = %s", (izabrana_sezona,))
+    cursor.execute("SELECT DISTINCT sifra FROM artikli WHERE sezona = %s ORDER BY sifra ASC", (izabrana_sezona,))
     sve_sifre = [red[0] for red in cursor.fetchall()]
     conn.close()
     
@@ -318,9 +324,10 @@ elif meni == "Evidencija izlaza (Po danima)":
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
             
+            # Povlačenje dostupnih boja za izabranu šifru
             conn = uzmi_vezu_sa_bazom()
             cursor = conn.cursor()
-            cursor.execute("SELECT boja FROM artikli WHERE sifra = %s AND sezona = %s", (izabrana_sifra, izabrana_sezona))
+            cursor.execute("SELECT boja FROM artikli WHERE sifra = %s AND sezona = %s ORDER BY boja ASC", (izabrana_sifra, izabrana_sezona))
             dostupne_boje = [red[0] for red in cursor.fetchall()]
             conn.close()
             izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje, key="izlaz_boja_select")
@@ -341,7 +348,7 @@ elif meni == "Evidencija izlaza (Po danima)":
             
             dinamicki_kljuc = f"izlaz_pari_input_{st.session_state['reset_brojac']}"
             kolicina_izlaza = st.number_input(
-                "Koliko pari izlazi iz magacina:", 
+                "Letimičan unos količine za izlaz:", 
                 min_value=1, max_value=max(1, current_stanje), 
                 step=1, value=None, key=dinamicki_kljuc
             )
@@ -352,24 +359,33 @@ elif meni == "Evidencija izlaza (Po danima)":
             if kolicina_izlaza is None or current_stanje < kolicina_izlaza or current_stanje == 0:
                 st.error("Greška: Nemate dovoljno pari na stanju!")
             else:
-                conn = uzmi_vezu_sa_bazom()
-                cursor = conn.cursor()
-                
-                cursor.execute('''
-                    INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
-                    VALUES (%s, %s, %s, %s)
-                ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
-                
-                novo_stanje = current_stanje - kolicina_izlaza
-                cursor.execute('''
-                    UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s
-                ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
-                
-                conn.commit()
-                conn.close()
-                st.session_state["reset_brojac"] += 1
-                st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
-                st.rerun()
+                with st.spinner("Zapisivanje u toku..."):
+                    try:
+                        # ⚡ OPTIMIZACIJA: Sve operacije izvršavamo odjednom unutar jedne brze veze sa bazom
+                        conn = uzmi_vezu_sa_bazom()
+                        cursor = conn.cursor()
+                        
+                        # 1. Beleženje izlaza
+                        cursor.execute('''
+                            INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
+                            VALUES (%s, %s, %s, %s)
+                        ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
+                        
+                        # 2. Ažuriranje količine u artiklima
+                        novo_stanje = current_stanje - kolicina_izlaza
+                        cursor.execute('''
+                            UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s
+                        ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
+                        
+                        # Potvrda celog paketa komandi odjednom
+                        conn.commit()
+                        conn.close()
+                        
+                        st.session_state["reset_brojac"] += 1
+                        st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Sistemska greška pri upisu: {e}")
 
         st.markdown("---")
         st.subheader(f"📋 Istorija dnevnih izlaza robe za sezonu: {izabrana_sezona}")
