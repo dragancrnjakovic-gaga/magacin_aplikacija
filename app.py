@@ -64,8 +64,7 @@ def kreiraj_tabele():
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
-# --- ⚡ OPTIMIZACIJA: KEŠIRANJE ŠIFRARNIKA BOJA ⚡ ---
-# ttl=600 znači da aplikacija pamti boje u memoriji 10 minuta, pre nego što opet pita bazu
+# --- KEŠIRANJE ŠIFRARNIKA BOJA ---
 @st.cache_data(ttl=600)
 def ucitaj_boje():
     conn = uzmi_vezu_sa_bazom()
@@ -80,6 +79,16 @@ def konvertuj_u_excel(df):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False, sheet_name='Magacin')
     return output.getvalue()
+
+# --- ⚡ POMOĆNA FUNKCIJA: Pronalazi postojeću sliku za šifru ⚡ ---
+def pronadji_sliku_za_sifru(sifra):
+    conn = uzmi_vezu_sa_bazom()
+    cursor = conn.cursor()
+    # Tražimo bilo koji artikal sa ovom šifrom koji ima unetu sliku
+    cursor.execute("SELECT slika_putanja FROM artikli WHERE sifra = %s AND slika_putanja != '' LIMIT 1", (sifra,))
+    rezultat = cursor.fetchone()
+    conn.close()
+    return rezultat[0] if rezultat else ""
 
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
@@ -129,7 +138,7 @@ if meni == "Unos nove robe":
         with col2:
             prodajna_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0)
             internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0)
-            slika = st.file_uploader("Ubaci sliku modela:", type=["jpg", "jpeg", "png"])
+            slika = st.file_uploader("Ubaci sliku modela (Ostavi prazno ako šifra već ima sliku):", type=["jpg", "jpeg", "png"])
             
         dugme_potvrdi = st.form_submit_button("Sačuvaj artikal u bazu")
         
@@ -138,6 +147,8 @@ if meni == "Unos nove robe":
                 st.error("Greška: Šifra i boja ne smeju biti prazne!")
             else:
                 url_slike = ""
+                
+                # Ako je korisnik ubacio novu sliku, šaljemo je na Cloudinary
                 if slika is not None:
                     with st.spinner("Slanje slike na Cloudinary..."):
                         try:
@@ -153,6 +164,11 @@ if meni == "Unos nove robe":
                             url_slike = rezultat_slike["secure_url"]
                         except Exception as e:
                             st.error(f"Greška pri slanju slike: {e}")
+                else:
+                    # ⚡ AKO JE SLIKA PRAZNA: Proveravamo da li ova šifra već ima sliku pod nekom drugom bojom
+                    url_slike = pronadji_sliku_za_sifru(sifra)
+                    if url_slike != "":
+                        st.info("💡 Automatski je preuzeta postojeća slika za ovu šifru modela!")
                 
                 try:
                     conn = uzmi_vezu_sa_bazom()
@@ -183,7 +199,6 @@ if meni == "Unos nove robe":
                     cursor.execute("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", (nova_boja_unos,))
                     conn.commit()
                     conn.close()
-                    # ⚡ Čistimo keš za boje da bi aplikacija odmah videla novu boju
                     ucitaj_boje.clear()
                     st.success(f"Boja '{nova_boja_unos}' je dodata!")
                     st.rerun()
@@ -232,6 +247,10 @@ elif meni == "Trenutno stanje":
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
+                # ⚡ AKO OVA BOJA NEMA SLIKU: Potraži da li neka druga boja pod istom šifrom ima sliku da je prikažeš
+                if not trenutna_slika or trenutna_slika == "":
+                    trenutna_slika = pronadji_sliku_za_sifru(sif)
+                
                 br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
                 ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
                 
@@ -265,7 +284,7 @@ elif meni == "Trenutno stanje":
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
-                                    finalna_putanja_slike = trenutna_slika
+                                    finalna_putanja_slike = row["slika_putanja"] # Čuvamo baš njenu originalnu vrednost iz baze
                                     if nova_slika_file is not None:
                                         with st.spinner("Menjanje slike..."):
                                             try:
@@ -309,7 +328,6 @@ elif meni == "Trenutno stanje":
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sezona: {izabrana_sezona}")
     
-    # ⚡ Povlačimo samo jedinstvene šifre iz trenutne sezone
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
     cursor.execute("SELECT DISTINCT sifra FROM artikli WHERE sezona = %s ORDER BY sifra ASC", (izabrana_sezona,))
@@ -324,7 +342,6 @@ elif meni == "Evidencija izlaza (Po danima)":
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
             
-            # Povlačenje dostupnih boja za izabranu šifru
             conn = uzmi_vezu_sa_bazom()
             cursor = conn.cursor()
             cursor.execute("SELECT boja FROM artikli WHERE sifra = %s AND sezona = %s ORDER BY boja ASC", (izabrana_sifra, izabrana_sezona))
@@ -339,8 +356,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
-                if rezultat:
-                    current_stanje = rezultat[0]
+                if resultado := rezultat:
+                    current_stanje = resultado[0]
                 conn.close()
             
             st.write("")
@@ -361,23 +378,19 @@ elif meni == "Evidencija izlaza (Po danima)":
             else:
                 with st.spinner("Zapisivanje u toku..."):
                     try:
-                        # ⚡ OPTIMIZACIJA: Sve operacije izvršavamo odjednom unutar jedne brze veze sa bazom
                         conn = uzmi_vezu_sa_bazom()
                         cursor = conn.cursor()
                         
-                        # 1. Beleženje izlaza
                         cursor.execute('''
                             INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
                             VALUES (%s, %s, %s, %s)
                         ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
                         
-                        # 2. Ažuriranje količine u artiklima
                         novo_stanje = current_stanje - kolicina_izlaza
                         cursor.execute('''
                             UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s
                         ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
                         
-                        # Potvrda celog paketa komandi odjednom
                         conn.commit()
                         conn.close()
                         
