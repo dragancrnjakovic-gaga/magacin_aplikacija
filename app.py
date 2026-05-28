@@ -100,15 +100,6 @@ st.markdown("""
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p { font-size: 0.85rem !important; }
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
-
-    /* Sakrivanje Streamlit modalnih prozora i dijaloga za keš */
-    div[role="dialog"]:has(button[aria-label="Clear caches"]),
-    .stDialog:has(button[aria-label="Clear caches"]),
-    div[data-testid="stModal"]:has(button[aria-label="Clear caches"]) {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -256,8 +247,16 @@ elif meni == "Trenutno stanje":
                         else:
                             st.write("❌ Nema slike")
                             
-                    with col_detalji:
-                        st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
+                    # Novi kod sa ugrađenom opcijom za kopiranje šifre:
+with col_detalji:
+    # Prikazujemo šifru u polju koje ima ugrađenu opciju kopiranja na jedan klik (ikonica desno)
+    st.text_input(
+        label=f"🎨 Boja artikla: {boj}", 
+        value=sif, 
+        key=f"copy_{kljuc_id}", 
+        disabled=False, 
+        label_visibility="visible"
+    )
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
                         c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
