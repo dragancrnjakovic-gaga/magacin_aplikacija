@@ -1,0 +1,3 @@
+[server]
+# Isključuje prečice na tastaturi unutar aplikacije (uključujući Ctrl+C popup)
+enableKeyboardShortcuts = false

@@ -105,30 +105,6 @@ st.markdown("""
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
-# --- BLOKIRANJE STREAMLIT PREČICE ZA KEŠ (CTRL+C) ---
-st.components.v1.html(
-    """
-    <script>
-    const handleKeyDown = (e) => {
-        // Provera da li je pritisnut Ctrl+C ili Cmd+C
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-            // Stopiramo širenje događaja ka Streamlit serveru
-            e.stopPropagation();
-        }
-    };
-    
-    // Hvataj pritisak tastera svuda gde je to moguće
-    document.addEventListener('keydown', handleKeyDown, true);
-    if (window.parent) {
-        window.parent.document.addEventListener('keydown', handleKeyDown, true);
-    }
-    if (window.top) {
-        window.top.document.addEventListener('keydown', handleKeyDown, true);
-    }
-    </script>
-    """,
-    height=0,
-)
 
 # 1. SEZONA
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI SEZONU:", ["Proleće-Leto", "Jesen-Zima"])
