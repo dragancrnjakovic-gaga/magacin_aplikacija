@@ -100,6 +100,15 @@ st.markdown("""
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p { font-size: 0.85rem !important; }
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
+
+    /* Sakrivanje Streamlit modalnih prozora i dijaloga za keš */
+    div[role="dialog"]:has(button[aria-label="Clear caches"]),
+    .stDialog:has(button[aria-label="Clear caches"]),
+    div[data-testid="stModal"]:has(button[aria-label="Clear caches"]) {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
