@@ -110,14 +110,21 @@ st.components.v1.html(
     """
     <script>
     const handleKeyDown = (e) => {
-        // Ako je pritisnut Ctrl+C ili Cmd+C (za Mac), spreči podrazumevanu Streamlit akciju
+        // Provera da li je pritisnut Ctrl+C ili Cmd+C
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-            // Dozvoljavamo normalno kopiranje teksta, ali stopiramo širenje događaja do Streamlit-a
+            // Stopiramo širenje događaja ka Streamlit serveru
             e.stopPropagation();
         }
     };
-    // Kačimo osluškivač na ceo prozor aplikacije
-    window.parent.document.addEventListener('keydown', handleKeyDown, true);
+    
+    // Hvataj pritisak tastera svuda gde je to moguće
+    document.addEventListener('keydown', handleKeyDown, true);
+    if (window.parent) {
+        window.parent.document.addEventListener('keydown', handleKeyDown, true);
+    }
+    if (window.top) {
+        window.top.document.addEventListener('keydown', handleKeyDown, true);
+    }
     </script>
     """,
     height=0,
