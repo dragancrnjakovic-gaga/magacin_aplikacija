@@ -8,7 +8,6 @@ from datetime import datetime
 import io
 
 # --- KONFIGURACIJA CLOUDINARY-JA ---
-# Podaci se povlače iz bezbednih Streamlit Secrets-a
 cloudinary.config(
     cloud_name = st.secrets["cloudinary"]["cloud_name"],
     api_key = st.secrets["cloudinary"]["api_key"],
@@ -18,14 +17,12 @@ cloudinary.config(
 
 # --- PODEŠAVANJE NEON POSTGRES BAZE ---
 def uzmi_vezu_sa_bazom():
-    # Povezivanje preko tajnog internet linka iz Neon-a
     return psycopg2.connect(st.secrets["postgres"]["url"])
 
 def kreiraj_tabele():
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
     
-    # Kreiranje tabele artikala na Neon-u
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS artikli (
             sifra TEXT,
@@ -40,7 +37,6 @@ def kreiraj_tabele():
         )
     ''')
     
-    # Kreiranje tabele izlaza na Neon-u
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS izlaz_robe (
             id SERIAL PRIMARY KEY,
@@ -51,7 +47,6 @@ def kreiraj_tabele():
         )
     ''')
     
-    # Kreiranje šifrarnika boja
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sifrarnik_boja (
             boja TEXT PRIMARY KEY
@@ -105,7 +100,6 @@ st.markdown("""
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
-
 # 1. SEZONA
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI SEZONU:", ["Proleće-Leto", "Jesen-Zima"])
 st.sidebar.markdown("---")
@@ -144,17 +138,16 @@ if meni == "Unos nove robe":
                 if slika is not None:
                     with st.spinner("Slanje slike na Cloudinary..."):
                         try:
-                            # Slanje fajla direktno na internet u folder "magacin"
                             rezultat_slike = cloudinary.uploader.upload(
-    slika, 
-    folder="magacin/",
-    public_id=f"{sifra}_{boja}",
-    transformation=[
-        {"width": 800, "crop": "limit"}, # Smanjuje sliku na max 800px širine samo ako je veća
-        {"quality": "auto", "fetch_format": "auto"} # Automatski kompresuje i bira najlakši format (npr. WebP)
-    ]
-)
-                            url_slike = resultado_slike = rezultat_slike["secure_url"]
+                                slika, 
+                                folder="magacin/",
+                                public_id=f"{sifra}_{boja}",
+                                transformation=[
+                                    {"width": 800, "crop": "limit"},
+                                    {"quality": "auto", "fetch_format": "auto"}
+                                ]
+                            )
+                            url_slike = rezultat_slike["secure_url"]
                         except Exception as e:
                             st.error(f"Greška pri slanju slike: {e}")
                 
@@ -247,21 +240,19 @@ elif meni == "Trenutno stanje":
                         else:
                             st.write("❌ Nema slike")
                             
-                    # Novi kod sa ugrađenom opcijom za kopiranje šifre:
-with col_detalji:
-    # Prikazujemo šifru u polju koje ima ugrađenu opciju kopiranja na jedan klik (ikonica desno)
-    st.text_input(
-        label=f"🎨 Boja artikla: {boj}", 
-        value=sif, 
-        key=f"copy_{kljuc_id}", 
-        disabled=False, 
-        label_visibility="visible"
-    )
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
-    c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
-    c3.metric("Prodajna", f"{row['prodajna_cena']} din")
-    c4.metric("Internet", f"{row['internet_cena']} din")
+                    with col_detalji:
+                        st.text_input(
+                            label=f"🎨 Boja artikla: {boj}", 
+                            value=sif, 
+                            key=f"copy_{kljuc_id}", 
+                            disabled=False, 
+                            label_visibility="visible"
+                        )
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
+                        c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
+                        c3.metric("Prodajna", f"{row['prodajna_cena']} din")
+                        c4.metric("Internet", f"{row['internet_cena']} din")
                         
                     with col_akcije:
                         ekspander = st.expander("🛠️ Izmeni / Obriši")
@@ -280,14 +271,14 @@ with col_detalji:
                                         with st.spinner("Menjanje slike..."):
                                             try:
                                                 rez_nove_slike = cloudinary.uploader.upload(
-    nova_slika_file,
-    folder="magacin/",
-    public_id=f"{sif}_{boj}",
-    transformation=[
-        {"width": 800, "crop": "limit"},
-        {"quality": "auto", "fetch_format": "auto"}
-    ]
-)
+                                                    nova_slika_file,
+                                                    folder="magacin/",
+                                                    public_id=f"{sif}_{boj}",
+                                                    transformation=[
+                                                        {"width": 800, "crop": "limit"},
+                                                        {"quality": "auto", "fetch_format": "auto"}
+                                                    ]
+                                                )
                                                 finalna_putanja_slike = rez_nove_slike["secure_url"]
                                             except:
                                                 pass
@@ -311,7 +302,6 @@ with col_detalji:
                                     cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
                                     conn.commit()
                                     conn.close()
-                                    # Sliku ostavljamo na Cloudinary-ju radi istorije ili je brišemo ručno tamo po potrebi
                                     st.warning("Obrisano!")
                                     st.rerun()
                 st.markdown("---")
@@ -342,30 +332,30 @@ elif meni == "Evidencija izlaza (Po danima)":
             izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje, key="izlaz_boja_select")
         
         with col2:
-            trenutno_na_stanju = 0
+            current_stanje = 0
             if izabrana_boja:
                 conn = uzmi_vezu_sa_bazom()
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
-                if rezultat:
-                    trenutno_na_stanju = rezultat[0]
+                if resultado = rezultat:
+                    current_stanje = resultado[0]
                 conn.close()
             
             st.write("")
-            st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{trenutno_na_stanju} pari**")
+            st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{current_stanje} pari**")
             
             dinamicki_kljuc = f"izlaz_pari_input_{st.session_state['reset_brojac']}"
             kolicina_izlaza = st.number_input(
                 "Koliko pari izlazi iz magacina:", 
-                min_value=1, max_value=max(1, trenutno_na_stanju), 
+                min_value=1, max_value=max(1, current_stanje), 
                 step=1, value=None, key=dinamicki_kljuc
             )
         
         dugme_onemoguceno = kolicina_izlaza is None or kolicina_izlaza <= 0
         
         if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz", disabled=dugme_onemoguceno):
-            if kolicina_izlaza is None or trenutno_na_stanju < kolicina_izlaza or trenutno_na_stanju == 0:
+            if kolicina_izlaza is None or current_stanje < kolicina_izlaza or current_stanje == 0:
                 st.error("Greška: Nemate dovoljno pari na stanju!")
             else:
                 conn = uzmi_vezu_sa_bazom()
@@ -376,7 +366,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                     VALUES (%s, %s, %s, %s)
                 ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
                 
-                novo_stanje = trenutno_na_stanju - kolicina_izlaza
+                novo_stanje = current_stanje - kolicina_izlaza
                 cursor.execute('''
                     UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s
                 ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
