@@ -338,8 +338,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
-                if resultado = rezultat:
-                    current_stanje = resultado[0]
+                if rezultat:
+                    current_stanje = rezultat[0]
                 conn.close()
             
             st.write("")
