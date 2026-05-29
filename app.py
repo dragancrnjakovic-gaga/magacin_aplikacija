@@ -127,66 +127,82 @@ if meni == "Unos nove robe":
     st.header(f"➕ Unos novog artikla ({izabrana_sezona})")
     lista_boja = ucitaj_boje()
     
-    with st.form("forma_za_unos", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            sifra = st.text_input("Šifra modela:").strip().upper()
-            boja = st.selectbox("Boja modela:", lista_boja)
-            # ⚡ Prazna numerička polja (value=None)
-            broj_pari = st.number_input("Količina pari:", min_value=0, step=1, value=None)
-            pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1, value=None)
-        with col2:
-            # ⚡ Prazna numerička polja (value=None)
-            prodajna_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=None)
-            internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0, value=None)
-            slika = st.file_uploader("Ubaci sliku modela (Ostavi prazno ako šifra već ima sliku):", type=["jpg", "jpeg", "png"])
-            
-        dugme_potvrdi = st.form_submit_button("Sačuvaj artikal u bazu")
+    # ⚡ Inicijalizacija session_state-a za kontrolu pražnjenja polja bez st.form bloka
+    if "unos_sifra" not in st.session_state: st.session_state["unos_sifra"] = ""
+    if "unos_boja" not in st.session_state: st.session_state["unos_boja"] = lista_boja[0] if lista_boja else ""
+    if "unos_kolicina" not in st.session_state: st.session_state["unos_kolicina"] = None
+    if "unos_kutija" not in st.session_state: st.session_state["unos_kutija"] = None
+    if "unos_prodajna" not in st.session_state: st.session_state["unos_prodajna"] = None
+    if "unos_internet" not in st.session_state: st.session_state["unos_internet"] = None
+    
+    # Isrtavamo polja slobodno (Enter ovde više ne okida čuvanje)
+    col1, col2 = st.columns(2)
+    with col1:
+        sifra = st.text_input("Šifra modela:", value=st.session_state["unos_sifra"]).strip().upper()
+        boja = st.selectbox("Boja modela:", lista_boja, index=lista_boja.index(st.session_state["unos_boja"]) if st.session_state["unos_boja"] in lista_boja else 0)
+        broj_pari = st.number_input("Količina pari:", min_value=0, step=1, value=st.session_state["unos_kolicina"])
+        pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1, value=st.session_state["unos_kutija"])
+    with col2:
+        prodajna_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=st.session_state["unos_prodajna"])
+        internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0, value=st.session_state["unos_internet"])
+        slika = st.file_uploader("Ubaci sliku modela (Ostavi prazno ako šifra već ima sliku):", type=["jpg", "jpeg", "png"], key=f"slika_unos_{st.session_state['reset_brojac']}")
         
-        if dugme_potvrdi:
-            if sifra == "" or boja is None or boja == "":
-                st.error("Greška: Šifra i boja ne smeju biti prazne!")
-            elif broj_pari is None or pari_u_kutiji is None:
-                st.error("Greška: Morate uneti količinu pari i broj pari u kutiji!")
-            else:
-                # Ako cene ostanu prazne, postavljamo ih na 0.0
-                p_cena_final = prodajna_cena if prodajna_cena is not None else 0.0
-                i_cena_final = internet_cena if internet_cena is not None else 0.0
-                
-                url_slike = ""
-                if slika is not None:
-                    with st.spinner("Slanje slike na Cloudinary..."):
-                        try:
-                            rezultat_slike = cloudinary.uploader.upload(
-                                slika, 
-                                folder="magacin/",
-                                public_id=f"{sifra}_{boja}",
-                                transformation=[
-                                    {"width": 800, "crop": "limit"},
-                                    {"quality": "auto", "fetch_format": "auto"}
-                                ]
-                            )
-                            url_slike = rezultat_slike["secure_url"]
-                        except Exception as e:
-                            st.error(f"Greška pri slanju slike: {e}")
-                else:
-                    url_slike = pronadji_sliku_za_sifru(sifra)
-                    if url_slike != "":
-                        st.info("💡 Automatski je preuzeta postojeća slika za ovu šifru modela!")
-                
+    # Validacija popunjenosti ključnih podataka pre nego što dozvolimo klik
+    podaci_nedostaju = (sifra == "" or boja is None or boja == "" or broj_pari is None or pari_u_kutiji is None)
+    
+    st.write("")
+    dugme_potvrdi = st.button("Sačuvaj artikal u bazu", type="primary", disabled=podaci_nedostaju)
+    
+    if podaci_nedostaju:
+        st.caption("⚠️ Dugme će postati aktivno kada popunite Šifru, Boju, Količinu pari i Broj pari u kutiji.")
+        
+    if dugme_potvrdi:
+        p_cena_final = prodajna_cena if prodajna_cena is not None else 0.0
+        i_cena_final = internet_cena if internet_cena is not None else 0.0
+        
+        url_slike = ""
+        if slika is not None:
+            with st.spinner("Slanje slike na Cloudinary..."):
                 try:
-                    conn = uzmi_vezu_sa_bazom()
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, p_cena_final, i_cena_final, url_slike))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}'!")
-                    st.rerun()
-                except psycopg2.IntegrityError:
-                    st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
+                    rezultat_slike = cloudinary.uploader.upload(
+                        slika, 
+                        folder="magacin/",
+                        public_id=f"{sifra}_{boja}",
+                        transformation=[
+                            {"width": 800, "crop": "limit"},
+                            {"quality": "auto", "fetch_format": "auto"}
+                        ]
+                    )
+                    url_slike = rezultat_slike["secure_url"]
+                except Exception as e:
+                    st.error(f"Greška pri slanju slike: {e}")
+        else:
+            url_slike = pronadji_sliku_za_sifru(sifra)
+            if url_slike != "":
+                st.info("💡 Automatski je preuzeta postojeća slika za ovu šifru modela!")
+        
+        try:
+            conn = uzmi_vezu_sa_bazom()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, p_cena_final, i_cena_final, url_slike))
+            conn.commit()
+            conn.close()
+            
+            # Resetujemo privremene vrednosti u stanju aplikacije da polja ponovo ostanu prazna
+            st.session_state["unos_sifra"] = ""
+            st.session_state["unos_kolicina"] = None
+            st.session_state["unos_kutija"] = None
+            st.session_state["unos_prodajna"] = None
+            st.session_state["unos_internet"] = None
+            st.session_state["reset_brojac"] += 1
+            
+            st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}'!")
+            st.rerun()
+        except psycopg2.IntegrityError:
+            st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
 
     st.markdown("---")
     st.subheader("🎨 Upravljanje listom boja")
@@ -257,7 +273,6 @@ elif meni == "Trenutno stanje":
                 br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
                 ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
                 
-                # ⚡ Pretvaramo cene u cele brojeve (bez decimala) za lepši prikaz
                 p_cena_int = int(row['prodajna_cena'])
                 i_cena_int = int(row['internet_cena'])
                 
@@ -274,7 +289,6 @@ elif meni == "Trenutno stanje":
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         c1, c2, c3, c4 = st.columns(4)
-                        # ⚡ Osvežene labele i prikazi cena bez decimala
                         c1.metric("Ukupno pari na stanju", f"{row['broj_pari']} kom")
                         c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
                         c3.metric("Prodajna cena", f"{p_cena_int} din")
@@ -365,7 +379,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    current_stanje = rezultat[0]
+                    current_stanje = resultado = rezultat[0]
                 conn.close()
             
             st.write("")
