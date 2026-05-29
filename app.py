@@ -80,11 +80,10 @@ def konvertuj_u_excel(df):
         df.to_excel(writer, index=False, sheet_name='Magacin')
     return output.getvalue()
 
-# --- ⚡ POMOĆNA FUNKCIJA: Pronalazi postojeću sliku za šifru ⚡ ---
+# --- POMOĆNA FUNKCIJA: Pronalazi postojeću sliku za šifru ---
 def pronadji_sliku_za_sifru(sifra):
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
-    # Tražimo bilo koji artikal sa ovom šifrom koji ima unetu sliku
     cursor.execute("SELECT slika_putanja FROM artikli WHERE sifra = %s AND slika_putanja != '' LIMIT 1", (sifra,))
     rezultat = cursor.fetchone()
     conn.close()
@@ -133,11 +132,13 @@ if meni == "Unos nove robe":
         with col1:
             sifra = st.text_input("Šifra modela:").strip().upper()
             boja = st.selectbox("Boja modela:", lista_boja)
-            broj_pari = st.number_input("Količina pari:", min_value=0, step=1)
-            pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1)
+            # ⚡ Prazna numerička polja (value=None)
+            broj_pari = st.number_input("Količina pari:", min_value=0, step=1, value=None)
+            pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1, value=None)
         with col2:
-            prodajna_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0)
-            internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0)
+            # ⚡ Prazna numerička polja (value=None)
+            prodajna_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=None)
+            internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0, value=None)
             slika = st.file_uploader("Ubaci sliku modela (Ostavi prazno ako šifra već ima sliku):", type=["jpg", "jpeg", "png"])
             
         dugme_potvrdi = st.form_submit_button("Sačuvaj artikal u bazu")
@@ -145,10 +146,14 @@ if meni == "Unos nove robe":
         if dugme_potvrdi:
             if sifra == "" or boja is None or boja == "":
                 st.error("Greška: Šifra i boja ne smeju biti prazne!")
+            elif broj_pari is None or pari_u_kutiji is None:
+                st.error("Greška: Morate uneti količinu pari i broj pari u kutiji!")
             else:
-                url_slike = ""
+                # Ako cene ostanu prazne, postavljamo ih na 0.0
+                p_cena_final = prodajna_cena if prodajna_cena is not None else 0.0
+                i_cena_final = internet_cena if internet_cena is not None else 0.0
                 
-                # Ako je korisnik ubacio novu sliku, šaljemo je na Cloudinary
+                url_slike = ""
                 if slika is not None:
                     with st.spinner("Slanje slike na Cloudinary..."):
                         try:
@@ -165,7 +170,6 @@ if meni == "Unos nove robe":
                         except Exception as e:
                             st.error(f"Greška pri slanju slike: {e}")
                 else:
-                    # ⚡ AKO JE SLIKA PRAZNA: Proveravamo da li ova šifra već ima sliku pod nekom drugom bojom
                     url_slike = pronadji_sliku_za_sifru(sifra)
                     if url_slike != "":
                         st.info("💡 Automatski je preuzeta postojeća slika za ovu šifru modela!")
@@ -176,7 +180,7 @@ if meni == "Unos nove robe":
                     cursor.execute('''
                         INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike))
+                    ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, p_cena_final, i_cena_final, url_slike))
                     conn.commit()
                     conn.close()
                     st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}'!")
@@ -247,12 +251,15 @@ elif meni == "Trenutno stanje":
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
-                # ⚡ AKO OVA BOJA NEMA SLIKU: Potraži da li neka druga boja pod istom šifrom ima sliku da je prikažeš
                 if not trenutna_slika or trenutna_slika == "":
                     trenutna_slika = pronadji_sliku_za_sifru(sif)
                 
                 br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
                 ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
+                
+                # ⚡ Pretvaramo cene u cele brojeve (bez decimala) za lepši prikaz
+                p_cena_int = int(row['prodajna_cena'])
+                i_cena_int = int(row['internet_cena'])
                 
                 with st.container():
                     col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
@@ -267,10 +274,11 @@ elif meni == "Trenutno stanje":
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Ukupno pari", f"{row['broj_pari']} kom")
+                        # ⚡ Osvežene labele i prikazi cena bez decimala
+                        c1.metric("Ukupno pari na stanju", f"{row['broj_pari']} kom")
                         c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
-                        c3.metric("Prodajna", f"{row['prodajna_cena']} din")
-                        c4.metric("Internet", f"{row['internet_cena']} din")
+                        c3.metric("Prodajna cena", f"{p_cena_int} din")
+                        c4.metric("Internet cena", f"{i_cena_int} din")
                         
                     with col_akcije:
                         ekspander = st.expander("🛠️ Izmeni / Obriši")
@@ -284,7 +292,7 @@ elif meni == "Trenutno stanje":
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
-                                    finalna_putanja_slike = row["slika_putanja"] # Čuvamo baš njenu originalnu vrednost iz baze
+                                    finalna_putanja_slike = row["slika_putanja"]
                                     if nova_slika_file is not None:
                                         with st.spinner("Menjanje slike..."):
                                             try:
@@ -356,8 +364,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
-                if resultado := rezultat:
-                    current_stanje = resultado[0]
+                if rezultat:
+                    current_stanje = rezultat[0]
                 conn.close()
             
             st.write("")
