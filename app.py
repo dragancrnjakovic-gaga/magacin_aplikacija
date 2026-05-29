@@ -127,7 +127,6 @@ if meni == "Unos nove robe":
     st.header(f"➕ Unos novog artikla ({izabrana_sezona})")
     lista_boja = ucitaj_boje()
     
-    # ⚡ Inicijalizacija session_state-a za kontrolu pražnjenja polja bez st.form bloka
     if "unos_sifra" not in st.session_state: st.session_state["unos_sifra"] = ""
     if "unos_boja" not in st.session_state: st.session_state["unos_boja"] = lista_boja[0] if lista_boja else ""
     if "unos_kolicina" not in st.session_state: st.session_state["unos_kolicina"] = None
@@ -135,7 +134,6 @@ if meni == "Unos nove robe":
     if "unos_prodajna" not in st.session_state: st.session_state["unos_prodajna"] = None
     if "unos_internet" not in st.session_state: st.session_state["unos_internet"] = None
     
-    # Isrtavamo polja slobodno (Enter ovde više ne okida čuvanje)
     col1, col2 = st.columns(2)
     with col1:
         sifra = st.text_input("Šifra modela:", value=st.session_state["unos_sifra"]).strip().upper()
@@ -147,19 +145,24 @@ if meni == "Unos nove robe":
         internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0, value=st.session_state["unos_internet"])
         slika = st.file_uploader("Ubaci sliku modela (Ostavi prazno ako šifra već ima sliku):", type=["jpg", "jpeg", "png"], key=f"slika_unos_{st.session_state['reset_brojac']}")
         
-    # Validacija popunjenosti ključnih podataka pre nego što dozvolimo klik
-    podaci_nedostaju = (sifra == "" or boja is None or boja == "" or broj_pari is None or pari_u_kutiji is None)
+    # ⚡ DODATO: Dugme je zaključano ako nedostaje BILO KOJE polje, uključujući i cene
+    podaci_nedostaju = (
+        sifra == "" or 
+        boja is None or 
+        boja == "" or 
+        broj_pari is None or 
+        pari_u_kutiji is None or 
+        prodajna_cena is None or 
+        internet_cena is None
+    )
     
     st.write("")
     dugme_potvrdi = st.button("Sačuvaj artikal u bazu", type="primary", disabled=podaci_nedostaju)
     
     if podaci_nedostaju:
-        st.caption("⚠️ Dugme će postati aktivno kada popunite Šifru, Boju, Količinu pari i Broj pari u kutiji.")
+        st.caption("⚠️ Dugme će postati aktivno kada popunite Šifru, Boju, Količinu pari, Broj pari u kutiji i obe Cene.")
         
     if dugme_potvrdi:
-        p_cena_final = prodajna_cena if prodajna_cena is not None else 0.0
-        i_cena_final = internet_cena if internet_cena is not None else 0.0
-        
         url_slike = ""
         if slika is not None:
             with st.spinner("Slanje slike na Cloudinary..."):
@@ -173,7 +176,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = rezultat_slike["secure_url"]
+                    url_slike = resultado_slike = rezultat_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -187,11 +190,10 @@ if meni == "Unos nove robe":
             cursor.execute('''
                 INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, p_cena_final, i_cena_final, url_slike))
+            ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike))
             conn.commit()
             conn.close()
             
-            # Resetujemo privremene vrednosti u stanju aplikacije da polja ponovo ostanu prazna
             st.session_state["unos_sifra"] = ""
             st.session_state["unos_kolicina"] = None
             st.session_state["unos_kutija"] = None
@@ -379,7 +381,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
                 if rezultat:
-                    current_stanje = resultado = rezultat[0]
+                    current_stanje = rezultat[0]
                 conn.close()
             
             st.write("")
