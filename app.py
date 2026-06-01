@@ -113,7 +113,7 @@ st.markdown("""
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p { font-size: 0.85rem !important; }
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
-    div[data-testid="stHorizontalBlock"] { background: #fdfdfd; padding: 10px; border-radius: 4px; margin-bottom: 5px; }
+    div[data-testid="stHorizontalBlock"] { background: #1e2229; padding: 15px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #2d3139; }
     </style>
 """, unsafe_allow_html=True)
 
