@@ -123,42 +123,17 @@ st.markdown("""
         border: 1px solid #2d3139; 
     }
     
-    /* 🎯 UNIKATNI I NEPROBOJNI CSS ZA HORIZONTALNU PAGINACIJU NA TELEFONIMA */
-    div.zona-paginacije > div {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        justify-content: flex-start !important;
-        align-items: center !important;
-        overflow-x: auto !important; /* Omogućava horizontalni swipe prstom levo-desno */
-        overflow-y: hidden !important;
-        gap: 6px !important;
-        padding: 10px 5px !important;
-        white-space: nowrap !important;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    /* Prisiljavamo Streamlit elemente unutar ove zone da ignorišu mobilno slaganje */
-    div.zona-paginacije div[data-testid="element-container"] {
-        display: inline-block !important;
-        width: auto !important;
-        min-width: auto !important;
-        margin: 0 !important;
-        flex: 0 0 auto !important;
-    }
-    
-    /* Sakrivamo scrollbar da bi izgledalo kao prirodna aplikacija */
-    div.zona-paginacije > div::-webkit-scrollbar {
-        display: none !important;
-    }
-    
-    /* Univerzalna veličina dugmića u paginaciji */
-    div.zona-paginacije button {
-        padding: 4px 12px !important;
-        font-size: 0.85rem !important;
-        min-width: 42px !important;
+    /* Kompaktna dugmad */
+    div.stButton > button {
+        width: 100% !important;
+        padding: 2px 10px !important;
+        font-size: 0.9rem !important;
         height: 38px !important;
-        text-align: center !important;
+    }
+    
+    /* Sakrivanje labele iznad selectbox-a u paginaciji da bi sve bilo u jednoj liniji */
+    div.skrivena-labela label {
+        display: none !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -182,71 +157,56 @@ st.sidebar.markdown("---")
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
-# Resetujemo stranicu na 1 ako se promeni meni
+# Inicijalizacija trenutne stranice
+if "trenutna_stranica" not in st.session_state:
+    st.session_state["trenutna_stranica"] = 1
+
 if meni != "Trenutno stanje":
     st.session_state["trenutna_stranica"] = 1
 
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
-# --- POTPUNO REPROGRAMIRANA FUNKCIJA ZA PAGINACIJU (BEZ ST.COLUMNS) ---
-def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
-    vidljivi_brojevi = set()
-    
-    if broj_stranica <= 12:
-        for i in range(1, broj_stranica + 1):
-            vidljivi_brojevi.add(i)
-    else:
-        for i in range(1, 4):
-            vidljivi_brojevi.add(i)
-            
-        if trenutna <= 6:
-            for i in range(1, 9):
-                vidljivi_brojevi.add(i)
-        else:
-            for i in range(max(1, trenutna - 3), min(broj_stranica + 1, trenutna + 4)):
-                vidljivi_brojevi.add(i)
-                
-        vidljivi_brojevi.add(broj_stranica)
-    
-    sortirani_brojevi = sorted(list(vidljivi_brojevi))
-    
-    ekran_lista = []
-    prethodni = 0
-    for br in sortirani_brojevi:
-        if br - prethodni > 1:
-            ekran_lista.append("...")
-        ekran_lista.append(br)
-        prethodni = br
 
-    # Otvaramo neprobojan HTML kontejner
-    st.markdown('<div class="zona-paginacije"><div>', unsafe_allow_html=True)
-    
-    # 1. Leva strelica
-    if st.button("⬅️", disabled=(trenutna == 1), key=f"{kljuc_prefiks}_prev"):
-        st.session_state["trenutna_stranica"] = trenutna - 1
-        st.session_state["skroluj_na_vrh"] = True
-        st.rerun()
-            
-    # 2. Brojevi i tačkice
-    for stavka in ekran_lista:
-        if stavka == "...":
-            st.markdown('<div style="display:inline-block; min-width:20px; text-align:center; color:gray; font-weight:bold; line-height:38px; vertical-align:middle;">...</div>', unsafe_allow_html=True)
-        else:
-            tip_dugmeta = "primary" if stavka == trenutna else "secondary"
-            if st.button(str(stavka), type=tip_dugmeta, key=f"{kljuc_prefiks}_str_{stavka}"):
-                st.session_state["trenutna_stranica"] = stavka
-                st.session_state["skroluj_na_vrh"] = True
-                st.rerun()
+# --- MOBILNO OPTIMIZOVANA PAGINACIJA PREKO SELECTBOX-A ---
+def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
+    if broj_stranica <= 1:
+        return
         
-    # 3. Desna strelica
-    if st.button("➡️", disabled=(trenutna == broj_stranica), key=f"{kljuc_prefiks}_next"):
-        st.session_state["trenutna_stranica"] = trenutna + 1
-        st.session_state["skroluj_na_vrh"] = True
-        st.rerun()
+    # Pravimo 3 kolone: [Strelica levo, Padajući meni, Strelica desno]
+    # Odnosi širina su podešeni da na telefonu stane sve savršeno u jedan red
+    pag_cols = st.columns([1, 3, 1])
+    
+    with pag_cols[0]:
+        if st.button("⬅️", disabled=(trenutna == 1), key=f"{kljuc_prefiks}_prev"):
+            st.session_state["trenutna_stranica"] = trenutna - 1
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
             
-    # Zatvaramo HTML kontejner
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    with pag_cols[1]:
+        opcije_stranica = [i for i in range(1, broj_stranica + 1)]
+        tekstualne_opcije = [f"Stranica {i} od {broj_stranica}" for i in opcije_stranica]
+        
+        st.markdown('<div class="skrivena-labela">', unsafe_allow_html=True)
+        izbor = st.selectbox(
+            "Izaberi stranicu:",
+            options=opcije_stranica,
+            index=opcije_stranica.index(trenutna),
+            format_func=lambda x: f"Stranica {x} od {broj_stranica}",
+            key=f"{kljuc_prefiks}_select_str"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if izbor != trenutna:
+            st.session_state["trenutna_stranica"] = izbor
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
+            
+    with pag_cols[2]:
+        if st.button("➡️", disabled=(trenutna == broj_stranica), key=f"{kljuc_prefiks}_next"):
+            st.session_state["trenutna_stranica"] = trenutna + 1
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
 
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
@@ -306,7 +266,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = rezultat_slike["secure_url"]
+                    url_slike = resultado_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -406,7 +366,8 @@ elif meni == "Trenutno stanje":
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
-            if "trenutna_stranica" not in st.session_state or pretraga != "":
+            # Ako je pretraga aktivna ili je stranica van opsega, resetuj na 1
+            if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
                 
             # 1. KONTROLE STRANICA NA VRHU
