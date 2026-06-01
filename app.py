@@ -64,7 +64,14 @@ def kreiraj_tabele():
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
-# --- KEŠIRANJE ŠIFRARNIKA BOJA ---
+# --- ⚡ NAPREDNO KEŠIRANJE PODATAKA (BRZINA STOTINU PUTA VEĆA) ⚡ ---
+@st.cache_data(ttl=300)  # Čuva podatke u memoriji do 5 minuta, osim ako ih mi ne osvežimo
+def ucitaj_artikle_za_sezonu(sezona):
+    conn = uzmi_vezu_sa_bazom()
+    df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
+    conn.close()
+    return df
+
 @st.cache_data(ttl=600)
 def ucitaj_boje():
     conn = uzmi_vezu_sa_bazom()
@@ -80,14 +87,14 @@ def konvertuj_u_excel(df):
         df.to_excel(writer, index=False, sheet_name='Magacin')
     return output.getvalue()
 
-# --- POMOĆNA FUNKCIJA: Pronalazi postojeću sliku za šifru ---
-def pronadji_sliku_za_sifru(sifra):
-    conn = uzmi_vezu_sa_bazom()
-    cursor = conn.cursor()
-    cursor.execute("SELECT slika_putanja FROM artikli WHERE sifra = %s AND slika_putanja != '' LIMIT 1", (sifra,))
-    rezultat = cursor.fetchone()
-    conn.close()
-    return rezultat[0] if rezultat else ""
+# --- POMOĆNA FUNKCIJA: Optimizovana pretraga slika u memoriji ---
+def pronadji_sliku_u_df(df, sifra):
+    if df.empty:
+        return ""
+    filtrirano = df[(df["sifra"] == sifra) & (df["slika_putanja"] != "") & (df["slika_putanja"].notna())]
+    if not filtrirano.empty:
+        return filtrirano.iloc[0]["slika_putanja"]
+    return ""
 
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
@@ -106,13 +113,13 @@ st.markdown("""
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p { font-size: 0.85rem !important; }
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
+    div[data-testid="stHorizontalBlock"] { background: #fdfdfd; padding: 10px; border-radius: 4px; margin-bottom: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
 # 1. KATEGORIJA / SEZONA
-# ⚡ DODATO: Opcija "Torbe" u bočni meni
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI KATEGORIJU / SEZONU:", ["Proleće-Leto", "Jesen-Zima", "Torbe"])
 st.sidebar.markdown("---")
 
@@ -139,7 +146,6 @@ if meni == "Unos nove robe":
     with col1:
         sifra = st.text_input("Šifra modela:", value=st.session_state["unos_sifra"]).strip().upper()
         boja = st.selectbox("Boja modela:", lista_boja, index=lista_boja.index(st.session_state["unos_boja"]) if st.session_state["unos_boja"] in lista_boja else 0)
-        # Prilagođen tekst labela za količinu ako su izabrane torbe (komada umesto pari)
         labela_kol = "Količina (komada/pari):" if izabrana_sezona == "Torbe" else "Količina pari:"
         labela_kut = "Broj komada u jednoj kutiji/pakovanju:" if izabrana_sezona == "Torbe" else "Broj pari u jednoj kutiji:"
         
@@ -167,6 +173,7 @@ if meni == "Unos nove robe":
         st.caption("⚠️ Dugme će postati aktivno kada popunite Šifru, Boju, Količinu, Pakovanje i obe Cene.")
         
     if dugme_potvrdi:
+        df_trenutni = ucitaj_artikle_za_sezonu(izabrana_sezona)
         url_slike = ""
         if slika is not None:
             with st.spinner("Slanje slike na Cloudinary..."):
@@ -184,7 +191,7 @@ if meni == "Unos nove robe":
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
-            url_slike = pronadji_sliku_za_sifru(sifra)
+            url_slike = pronadji_sliku_u_df(df_trenutni, sifra)
             if url_slike != "":
                 st.info("💡 Automatski je preuzeta postojeća slika za ovu šifru modela!")
         
@@ -197,6 +204,9 @@ if meni == "Unos nove robe":
             ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike))
             conn.commit()
             conn.close()
+            
+            # Poništavamo keš jer smo dodali novi artikal
+            ucitaj_artikle_za_sezonu.clear()
             
             st.session_state["unos_sifra"] = ""
             st.session_state["unos_kolicina"] = None
@@ -231,18 +241,18 @@ if meni == "Unos nove robe":
                 except psycopg2.IntegrityError:
                     st.warning("Boja već postoji u listi.")
 
-# --- OPCIJA 2: TRENUTNO STANJE ---
+# --- OPCIJA 2: TRENUTNO STANJE (⚡ UBRIZGANA BRZINA I STRANIČENJE ⚡) ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
     
-    conn = uzmi_vezu_sa_bazom()
-    df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s", conn, params=(izabrana_sezona,))
-    conn.close()
+    # Podaci lete iz keš memorije
+    df = ucitaj_artikle_za_sezonu(izabrana_sezona)
     
     if df.empty:
         st.info(f"U sekciji {izabrana_sezona} trenutno nema unete robe.")
     else:
+        # Excel generisanje radi nad celim setom podataka bez obzira na stranicu
         df_excel = df.copy()
         df_excel["Broj kutija"] = df_excel["broj_pari"] // df_excel["pari_u_kutiji"]
         df_excel["Ostatak"] = df_excel["broj_pari"] % df_excel["pari_u_kutiji"]
@@ -258,28 +268,62 @@ elif meni == "Trenutno stanje":
         
         excel_podaci = konvertuj_u_excel(df_excel)
         st.download_button(
-            label="🟢 Preuzmi stanje kao Excel tabelu (.xlsx)",
+            label="🟢 Preuzmi kompletno stanje kao Excel tabelu (.xlsx)",
             data=excel_podaci,
             file_name=f"stanje_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
         st.markdown("---")
-        pretraga = st.text_input("🔍 Pretraži ovu sekciju po šifri modela:", "").strip().upper()
-        if pretraga:
-            df = df[df["sifra"].str.contains(pretraga, na=False)]
         
-        if df.empty:
+        # 🔍 PRETRAGA: Pretražuje SVE artikle u memoriji, nezavisno od stranice!
+        pretraga = st.text_input("🔍 Pretraži ovu sekciju po šifri modela (Pretražuje sve stranice):", "").strip().upper()
+        if pretraga:
+            df_prikaz = df[df["sifra"].str.contains(pretraga, na=False)]
+        else:
+            df_prikaz = df.copy()
+        
+        if df_prikaz.empty:
             st.warning(f"Nema rezultata za šifru '{pretraga}'")
         else:
-            for index, row in df.iterrows():
+            # 📖 IMPLEMENTACIJA STRANIČENJA (PAGINATION)
+            BROJ_ARTIKALA_PO_STRANICI = 20
+            ukupno_artikala = len(df_prikaz)
+            broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
+            
+            # Ako radnik pretražuje, obično ima malo rezultata pa mu stranice ne trebaju ili se resetuju
+            if "trenutna_stranica" not in st.session_state or pretraga != "":
+                st.session_state["trenutna_stranica"] = 1
+                
+            # Kontrole stranica (prikazujemo samo ako ima više od 1 stranice i nema pretrage)
+            if broj_stranica > 1 and not pretraga:
+                col_pag1, col_pag2, col_pag3 = st.columns([1, 4, 1])
+                with col_pag1:
+                    if st.button("⬅️ Prethodna", disabled=(st.session_state["trenutna_stranica"] == 1)):
+                        st.session_state["trenutna_stranica"] -= 1
+                        st.rerun()
+                with col_pag2:
+                    st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica} (Ukupno uneto: {ukupno_artikala} modela)</p>", unsafe_allow_html=True)
+                with col_pag3:
+                    if st.button("Sledeća ➡️", disabled=(st.session_state["trenutna_stranica"] == broj_stranica)):
+                        st.session_state["trenutna_stranica"] += 1
+                        st.rerun()
+            
+            # Isecanje podataka za trenutnu stranicu
+            start_indeks = (st.session_state["trenutna_stranica"] - 1) * BROJ_ARTIKALA_PO_STRANICI
+            kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
+            df_za_prikaz = df_prikaz.iloc[start_indeks:kraj_indeks]
+            
+            # Renderovanje odabranih 20 artikala
+            for index, row in df_za_prikaz.iterrows():
                 sif = row['sifra']
                 boj = row['boja']
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
+                # Sliku tražimo isključivo u memoriji (nema upita ka bazi unutar petlje!)
                 if not trenutna_slika or trenutna_slika == "":
-                    trenutna_slika = pronadji_sliku_za_sifru(sif)
+                    trenutna_slika = pronadji_sliku_u_df(df, sif)
                 
                 br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
                 ost_pari = row["broj_pari"] % row["pari_u_kutiji"]
@@ -291,7 +335,9 @@ elif meni == "Trenutno stanje":
                     col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
                     with col_slika:
                         if trenutna_slika:
-                            st.image(trenutna_slika, width=120)
+                            # ⚡ Optimizacija: Cloudinary-ju tražimo malu sličicu širine 150px radi ekstremne brzine
+                            mala_slika_url = trenutna_slika.replace("/upload/", "/upload/w_150,c_limit,q_auto,f_auto/")
+                            st.image(mala_slika_url, width=120)
                             with st.expander("🔍 Vidi veliku sliku"):
                                 st.image(trenutna_slika, use_container_width=True)
                         else:
@@ -355,6 +401,9 @@ elif meni == "Trenutno stanje":
                                         ''', (nova_boja_izmena, nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, sif, boj, izabrana_sezona))
                                         conn.commit()
                                         conn.close()
+                                        
+                                        # Odmah čistimo keš da tabela povuče nove podatke
+                                        ucitaj_artikle_za_sezonu.clear()
                                         st.success("Izmenjeno!")
                                         st.rerun()
                                     except psycopg2.IntegrityError:
@@ -367,6 +416,9 @@ elif meni == "Trenutno stanje":
                                     cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
                                     conn.commit()
                                     conn.close()
+                                    
+                                    # Čistimo keš nakon brisanja
+                                    ucitaj_artikle_za_sezonu.clear()
                                     st.warning("Obrisano!")
                                     st.rerun()
                 st.markdown("---")
@@ -375,11 +427,9 @@ elif meni == "Trenutno stanje":
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     
-    conn = uzmi_vezu_sa_bazom()
-    cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT sifra FROM artikli WHERE sezona = %s ORDER BY sifra ASC", (izabrana_sezona,))
-    sve_sifre = [red[0] for red in cursor.fetchall()]
-    conn.close()
+    # Koristimo brzi keširani df za izvlačenje jedinstvenih šifara
+    df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
+    sve_sifre = sorted(df_artikli["sifra"].unique().tolist()) if not df_artikli.empty else []
     
     if not sve_sifre:
         st.info(f"Nema unete robe u sekciji {izabrana_sezona} da biste zabeležili izlaz.")
@@ -389,23 +439,15 @@ elif meni == "Evidencija izlaza (Po danima)":
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key="izlaz_sifra_select")
             
-            conn = uzmi_vezu_sa_bazom()
-            cursor = conn.cursor()
-            cursor.execute("SELECT boja FROM artikli WHERE sifra = %s AND sezona = %s ORDER BY boja ASC", (izabrana_sifra, izabrana_sezona))
-            dostupne_boje = [red[0] for red in cursor.fetchall()]
-            conn.close()
+            dostupne_boje = sorted(df_artikli[df_artikli["sifra"] == izabrana_sifra]["boja"].tolist())
             izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje, key="izlaz_boja_select")
         
         with col2:
             current_stanje = 0
             if izabrana_boja:
-                conn = uzmi_vezu_sa_bazom()
-                cursor = conn.cursor()
-                cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
-                rezultat = cursor.fetchone()
-                if rezultat:
-                    current_stanje = rezultat[0]
-                conn.close()
+                filtriran_red = df_artikli[(df_artikli["sifra"] == izabrana_sifra) & (df_artikli["boja"] == izabrana_boja)]
+                if not filtriran_red.empty:
+                    current_stanje = int(filtriran_red.iloc[0]["broj_pari"])
             
             st.write("")
             sufiks_stanje = "komada" if izabrana_sezona == "Torbe" else "pari"
@@ -442,6 +484,9 @@ elif meni == "Evidencija izlaza (Po danima)":
                         
                         conn.commit()
                         conn.close()
+                        
+                        # Čistimo keš jer je promenjena količina
+                        ucitaj_artikle_za_sezonu.clear()
                         
                         st.session_state["reset_brojac"] += 1
                         st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} {sufiks_stanje}.")
