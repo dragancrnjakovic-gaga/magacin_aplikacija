@@ -115,10 +115,12 @@ st.markdown("""
     .stExpander p { font-size: 0.8rem !important; }
     div[data-testid="stHorizontalBlock"] { background: #1e2229; padding: 15px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #2d3139; }
     
-    /* Stilizacija dugmadi za stranice da izgledaju lepše i kompaktnije */
+    /* Stilizacija dugmadi za stranice da izgledaju lepše, ujednačenije i kompaktnije */
     div.stButton > button {
         padding: 2px 10px !important;
         font-size: 0.85rem !important;
+        min-width: 40px !important;
+        text-align: center !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -149,26 +151,34 @@ if meni != "Trenutno stanje":
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
-# --- POMOĆNA FUNKCIJA ZA PRIKAZ PAMETNE PAGINACIJE (BROJEVA STRANICA) ---
+# --- PREFINJENA POMOĆNA FUNKCIJA ZA PRIKAZ PAGINACIJE ---
 def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
-    # Generisanje logike za brojeve: uvek prikazujemo prve stranice, okolne oko trenutne i poslednju
     vidljivi_brojevi = set()
     
-    # Uvek prikaži prve stranice (do 10 ako smo na početku)
-    granica_pocetka = 10 if trenutna < 5 else 3
-    for i in range(1, min(granica_pocetka + 1, broj_stranica + 1)):
-        vidljivi_brojevi.add(i)
-        
-    # Prikaži stranice oko trenutne (2 ispred, 2 iza)
-    for i in range(max(1, trenutna - 2), min(broj_stranica + 1, trenutna + 3)):
-        vidljivi_brojevi.add(i)
-        
-    # Uvek prikaži poslednju stranicu
-    vidljivi_brojevi.add(broj_stranica)
+    # Ako je ukupan broj stranica mali (npr. do 12), prikaži ih sve bez ikakvog skraćivanja
+    if broj_stranica <= 12:
+        for i in range(1, broj_stranica + 1):
+            vidljivi_brojevi.add(i)
+    else:
+        # Uvek prikaži prve tri stranice stabilno (1, 2, 3)
+        for i in range(1, 4):
+            vidljivi_brojevi.add(i)
+            
+        # Ako smo blizu početka (stranice 1-6), prikaži stabilno ceo blok do 8 da nema "skakutanja" boks-a
+        if trenutna <= 6:
+            for i in range(1, 9):
+                vidljivi_brojevi.add(i)
+        # Ako smo negde u sredini ili prema kraju, dinamički širi opseg oko trenutne stranice
+        else:
+            for i in range(max(1, trenutna - 3), min(broj_stranica + 1, trenutna + 4)):
+                vidljivi_brojevi.add(i)
+                
+        # Uvek prikaži poslednju stranicu na kraju niza
+        vidljivi_brojevi.add(broj_stranica)
     
     sortirani_brojevi = sorted(list(vidljivi_brojevi))
     
-    # Pravimo dinamičke kolone u Streamlit-u za brojeve i tri tačke
+    # Formatiranje prikaza sa tri tačke na prirodnim mestima
     ekran_lista = []
     prethodni = 0
     for br in sortirani_brojevi:
@@ -177,24 +187,23 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
         ekran_lista.append(br)
         prethodni = br
 
-    # Kreiramo kolone: za svaku stavku po jedna uska kolona
+    # Generisanje kolona u Streamlit-u na osnovu broja elemenata
     cols = st.columns(len(ekran_lista) + 2)
     
-    # 1. Strelica za prethodnu
+    # 1. Leva strelica
     with cols[0]:
         if st.button("⬅️", disabled=(trenutna == 1), key=f"{kljuc_prefiks}_prev"):
             st.session_state["trenutna_stranica"] = trenutna - 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
             
-    # 2. Brojevi i tri tačke
+    # 2. Brojevi i separator (...)
     trenutna_kol_indeks = 1
     for stavka in ekran_lista:
         with cols[trenutna_kol_indeks]:
             if stavka == "...":
-                st.write("<p style='margin-top:5px; text-align:center; color:gray;'>...</p>", unsafe_allow_html=True)
+                st.write("<p style='margin-top:5px; text-align:center; color:gray; font-weight:bold;'>...</p>", unsafe_allow_html=True)
             else:
-                # Ako je to trenutna stranica, bojimo dugme u "primary" stil (crveno/plavo zavisno od teme)
                 tip_dugmeta = "primary" if stavka == trenutna else "secondary"
                 if st.button(str(stavka), type=tip_dugmeta, key=f"{kljuc_prefiks}_str_{stavka}"):
                     st.session_state["trenutna_stranica"] = stavka
@@ -202,7 +211,7 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
                     st.rerun()
         trenutna_kol_indeks += 1
         
-    # 3. Strelica za sledeću
+    # 3. Desna strelica
     with cols[trenutna_kol_indeks]:
         if st.button("➡️", disabled=(trenutna == broj_stranica), key=f"{kljuc_prefiks}_next"):
             st.session_state["trenutna_stranica"] = trenutna + 1
@@ -370,7 +379,7 @@ elif meni == "Trenutno stanje":
             if "trenutna_stranica" not in st.session_state or pretraga != "":
                 st.session_state["trenutna_stranica"] = 1
                 
-            # 1. KONTROLE STRANICA NA VRHU (Zamenjeno pametnim brojevima)
+            # 1. KONTROLE STRANICA NA VRHU
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
                 prikazi_brojeve_stranica(broj_stranica, st.session_state["trenutna_stranica"], "vrh")
@@ -485,7 +494,7 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
             
-            # 2. KONTROLE STRANICA NA DNU (Zamenjeno pametnim brojevima)
+            # 2. KONTROLE STRANICA NA DNU
             if broj_stranica > 1 and not pretraga:
                 prikazi_brojeve_stranica(broj_stranica, st.session_state["trenutna_stranica"], "dole")
 
