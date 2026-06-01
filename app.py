@@ -115,11 +115,36 @@ st.markdown("""
     .stExpander p { font-size: 0.8rem !important; }
     div[data-testid="stHorizontalBlock"] { background: #1e2229; padding: 15px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #2d3139; }
     
-    /* Stilizacija dugmadi za stranice da izgledaju lepše, ujednačenije i kompaktnije */
+    /* 📱 MOĆAN CSS ZA HORIZONTALNU PAGINACIJU NA MOBILNOM */
+    .flex-paginacija {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        justify-content: flex-start !important;
+        align-items: center !important;
+        gap: 8px !important;
+        overflow-x: auto !important; /* Omogućava horizontalni swipe prstom */
+        padding: 10px 5px !important;
+        white-space: nowrap !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Sakrivamo ružan scrollbar na telefonima da izgleda čisto */
+    .flex-paginacija::-webkit-scrollbar {
+        display: none;
+    }
+    
+    /* Prisiljavamo Streamlit dugmad unutar ovog kontejnera da ostanu u liniji */
+    .flex-paginacija div[data-testid="stBlock"] {
+        min-width: auto !important;
+        flex: 0 0 auto !important;
+    }
+    
     div.stButton > button {
-        padding: 2px 10px !important;
+        padding: 4px 12px !important;
         font-size: 0.85rem !important;
-        min-width: 40px !important;
+        min-width: 42px !important;
+        height: 38px !important;
         text-align: center !important;
     }
     </style>
@@ -151,34 +176,28 @@ if meni != "Trenutno stanje":
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
-# --- PREFINJENA POMOĆNA FUNKCIJA ZA PRIKAZ PAGINACIJE ---
+# --- UNAPREĐENA FUNKCIJA ZA PRIKAZ PAGINACIJE (FLEXBOX OTPORAN NA MOBILNE) ---
 def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
     vidljivi_brojevi = set()
     
-    # Ako je ukupan broj stranica mali (npr. do 12), prikaži ih sve bez ikakvog skraćivanja
     if broj_stranica <= 12:
         for i in range(1, broj_stranica + 1):
             vidljivi_brojevi.add(i)
     else:
-        # Uvek prikaži prve tri stranice stabilno (1, 2, 3)
         for i in range(1, 4):
             vidljivi_brojevi.add(i)
             
-        # Ako smo blizu početka (stranice 1-6), prikaži stabilno ceo blok do 8 da nema "skakutanja" boks-a
         if trenutna <= 6:
             for i in range(1, 9):
                 vidljivi_brojevi.add(i)
-        # Ako smo negde u sredini ili prema kraju, dinamički širi opseg oko trenutne stranice
         else:
             for i in range(max(1, trenutna - 3), min(broj_stranica + 1, trenutna + 4)):
                 vidljivi_brojevi.add(i)
                 
-        # Uvek prikaži poslednju stranicu na kraju niza
         vidljivi_brojevi.add(broj_stranica)
     
     sortirani_brojevi = sorted(list(vidljivi_brojevi))
     
-    # Formatiranje prikaza sa tri tačke na prirodnim mestima
     ekran_lista = []
     prethodni = 0
     for br in sortirani_brojevi:
@@ -187,7 +206,10 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
         ekran_lista.append(br)
         prethodni = br
 
-    # Generisanje kolona u Streamlit-u na osnovu broja elemenata
+    # Koristimo HTML div sa našom novom klasom "flex-paginacija" koja drži sve u jednom redu
+    st.markdown('<div class="flex-paginacija">', unsafe_allow_html=True)
+    
+    # Kreiramo tačan broj mikro-kolona unutar tog kontejnera
     cols = st.columns(len(ekran_lista) + 2)
     
     # 1. Leva strelica
@@ -202,7 +224,8 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
     for stavka in ekran_lista:
         with cols[trenutna_kol_indeks]:
             if stavka == "...":
-                st.write("<p style='margin-top:5px; text-align:center; color:gray; font-weight:bold;'>...</p>", unsafe_allow_html=True)
+                # Stilizovan separator koji ne lomi red
+                st.write('<div style="display:inline-block; min-width:25px; text-align:center; color:gray; font-weight:bold; line-height:38px;">...</div>', unsafe_allow_html=True)
             else:
                 tip_dugmeta = "primary" if stavka == trenutna else "secondary"
                 if st.button(str(stavka), type=tip_dugmeta, key=f"{kljuc_prefiks}_str_{stavka}"):
@@ -217,6 +240,8 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
             st.session_state["trenutna_stranica"] = trenutna + 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
+            
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
