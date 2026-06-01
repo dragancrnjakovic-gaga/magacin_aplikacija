@@ -114,7 +114,7 @@ st.markdown("""
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
     
-    /* Globalni stil za kartice artikala na stanju */
+    /* Kartice artikala */
     div[data-testid="stHorizontalBlock"] { 
         background: #1e2229; 
         padding: 15px; 
@@ -123,37 +123,40 @@ st.markdown("""
         border: 1px solid #2d3139; 
     }
     
-    /* 🔥 KRAJNJE REŠENJE ZA TELEFONE: Presrećemo samu Streamlitovu strukturu kolona unutar paginacije */
-    div.zona-paginacije div[data-testid="stHorizontalBlock"] {
+    /* 🎯 UNIKATNI I NEPROBOJNI CSS ZA HORIZONTALNU PAGINACIJU NA TELEFONIMA */
+    div.zona-paginacije > div {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         justify-content: flex-start !important;
         align-items: center !important;
-        overflow-x: auto !important; /* Dozvoli swipe prstom levo-desno */
+        overflow-x: auto !important; /* Omogućava horizontalni swipe prstom levo-desno */
         overflow-y: hidden !important;
         gap: 6px !important;
-        padding: 10px !important;
-        background: #1e2229 !important;
+        padding: 10px 5px !important;
+        white-space: nowrap !important;
+        -webkit-overflow-scrolling: touch;
     }
-    
-    /* Sprečavamo da se pojedinačni dugmići skupe na nulu ili prebace dole */
-    div.zona-paginacije div[data-testid="stHorizontalBlock"] > div {
-        flex: 0 0 auto !important;
-        min-width: auto !important;
+
+    /* Prisiljavamo Streamlit elemente unutar ove zone da ignorišu mobilno slaganje */
+    div.zona-paginacije div[data-testid="element-container"] {
+        display: inline-block !important;
         width: auto !important;
+        min-width: auto !important;
+        margin: 0 !important;
+        flex: 0 0 auto !important;
     }
     
-    /* Sakrivanje scrollbar trake radi lepšeg izgleda */
-    div.zona-paginacije div[data-testid="stHorizontalBlock"]::-webkit-scrollbar {
+    /* Sakrivamo scrollbar da bi izgledalo kao prirodna aplikacija */
+    div.zona-paginacije > div::-webkit-scrollbar {
         display: none !important;
     }
     
-    /* Kompaktna podešavanja same dugmadi */
-    div.stButton > button {
-        padding: 2px 10px !important;
+    /* Univerzalna veličina dugmića u paginaciji */
+    div.zona-paginacije button {
+        padding: 4px 12px !important;
         font-size: 0.85rem !important;
-        min-width: 40px !important;
+        min-width: 42px !important;
         height: 38px !important;
         text-align: center !important;
     }
@@ -186,7 +189,7 @@ if meni != "Trenutno stanje":
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
-# --- UNAPREĐENA FUNKCIJA ZA PRIKAZ PAGINACIJE (SADA STRIKTNO RADI NA SVIM TELEFONIMA) ---
+# --- POTPUNO REPROGRAMIRANA FUNKCIJA ZA PAGINACIJU (BEZ ST.COLUMNS) ---
 def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
     vidljivi_brojevi = set()
     
@@ -216,40 +219,34 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
         ekran_lista.append(br)
         prethodni = br
 
-    # 👇 Pakujemo ceo blok u HTML klasu "zona-paginacije" koju naš CSS na vrhu precizno kontroliše
-    st.markdown('<div class="zona-paginacije">', unsafe_allow_html=True)
-    
-    cols = st.columns(len(ekran_lista) + 2)
+    # Otvaramo neprobojan HTML kontejner
+    st.markdown('<div class="zona-paginacije"><div>', unsafe_allow_html=True)
     
     # 1. Leva strelica
-    with cols[0]:
-        if st.button("⬅️", disabled=(trenutna == 1), key=f"{kljuc_prefiks}_prev"):
-            st.session_state["trenutna_stranica"] = trenutna - 1
-            st.session_state["skroluj_na_vrh"] = True
-            st.rerun()
+    if st.button("⬅️", disabled=(trenutna == 1), key=f"{kljuc_prefiks}_prev"):
+        st.session_state["trenutna_stranica"] = trenutna - 1
+        st.session_state["skroluj_na_vrh"] = True
+        st.rerun()
             
-    # 2. Brojevi i separator (...)
-    trenutna_kol_indeks = 1
+    # 2. Brojevi i tačkice
     for stavka in ekran_lista:
-        with cols[trenutna_kol_indeks]:
-            if stavka == "...":
-                st.write('<div style="display:inline-block; min-width:20px; text-align:center; color:gray; font-weight:bold; line-height:38px;">...</div>', unsafe_allow_html=True)
-            else:
-                tip_dugmeta = "primary" if stavka == trenutna else "secondary"
-                if st.button(str(stavka), type=tip_dugmeta, key=f"{kljuc_prefiks}_str_{stavka}"):
-                    st.session_state["trenutna_stranica"] = stavka
-                    st.session_state["skroluj_na_vrh"] = True
-                    st.rerun()
-        trenutna_kol_indeks += 1
+        if stavka == "...":
+            st.markdown('<div style="display:inline-block; min-width:20px; text-align:center; color:gray; font-weight:bold; line-height:38px; vertical-align:middle;">...</div>', unsafe_allow_html=True)
+        else:
+            tip_dugmeta = "primary" if stavka == trenutna else "secondary"
+            if st.button(str(stavka), type=tip_dugmeta, key=f"{kljuc_prefiks}_str_{stavka}"):
+                st.session_state["trenutna_stranica"] = stavka
+                st.session_state["skroluj_na_vrh"] = True
+                st.rerun()
         
     # 3. Desna strelica
-    with cols[trenutna_kol_indeks]:
-        if st.button("➡️", disabled=(trenutna == broj_stranica), key=f"{kljuc_prefiks}_next"):
-            st.session_state["trenutna_stranica"] = trenutna + 1
-            st.session_state["skroluj_na_vrh"] = True
-            st.rerun()
+    if st.button("➡️", disabled=(trenutna == broj_stranica), key=f"{kljuc_prefiks}_next"):
+        st.session_state["trenutna_stranica"] = trenutna + 1
+        st.session_state["skroluj_na_vrh"] = True
+        st.rerun()
             
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Zatvaramo HTML kontejner
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
