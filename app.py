@@ -64,8 +64,8 @@ def kreiraj_tabele():
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
-# --- ⚡ NAPREDNO KEŠIRANJE PODATAKA (BRZINA STOTINU PUTA VEĆA) ⚡ ---
-@st.cache_data(ttl=300)  # Čuva podatke u memoriji do 5 minuta, osim ako ih mi ne osvežimo
+# --- NAPREDNO KEŠIRANJE PODATAKA ---
+@st.cache_data(ttl=300)
 def ucitaj_artikle_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
@@ -205,7 +205,6 @@ if meni == "Unos nove robe":
             conn.commit()
             conn.close()
             
-            # Poništavamo keš jer smo dodali novi artikal
             ucitaj_artikle_za_sezonu.clear()
             
             st.session_state["unos_sifra"] = ""
@@ -241,18 +240,16 @@ if meni == "Unos nove robe":
                 except psycopg2.IntegrityError:
                     st.warning("Boja već postoji u listi.")
 
-# --- OPCIJA 2: TRENUTNO STANJE (⚡ UBRIZGANA BRZINA I STRANIČENJE ⚡) ---
+# --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
     
-    # Podaci lete iz keš memorije
     df = ucitaj_artikle_za_sezonu(izabrana_sezona)
     
     if df.empty:
         st.info(f"U sekciji {izabrana_sezona} trenutno nema unete robe.")
     else:
-        # Excel generisanje radi nad celim setom podataka bez obzira na stranicu
         df_excel = df.copy()
         df_excel["Broj kutija"] = df_excel["broj_pari"] // df_excel["pari_u_kutiji"]
         df_excel["Ostatak"] = df_excel["broj_pari"] % df_excel["pari_u_kutiji"]
@@ -276,7 +273,6 @@ elif meni == "Trenutno stanje":
         
         st.markdown("---")
         
-        # 🔍 PRETRAGA: Pretražuje SVE artikle u memoriji, nezavisno od stranice!
         pretraga = st.text_input("🔍 Pretraži ovu sekciju po šifri modela (Pretražuje sve stranice):", "").strip().upper()
         if pretraga:
             df_prikaz = df[df["sifra"].str.contains(pretraga, na=False)]
@@ -286,42 +282,39 @@ elif meni == "Trenutno stanje":
         if df_prikaz.empty:
             st.warning(f"Nema rezultata za šifru '{pretraga}'")
         else:
-            # 📖 IMPLEMENTACIJA STRANIČENJA (PAGINATION)
+            # KONFIGURACIJA STRANIČENJA
             BROJ_ARTIKALA_PO_STRANICI = 20
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
-            # Ako radnik pretražuje, obično ima malo rezultata pa mu stranice ne trebaju ili se resetuju
             if "trenutna_stranica" not in st.session_state or pretraga != "":
                 st.session_state["trenutna_stranica"] = 1
                 
-            # Kontrole stranica (prikazujemo samo ako ima više od 1 stranice i nema pretrage)
+            # 1. KONTROLE STRANICA NA VRHU
             if broj_stranica > 1 and not pretraga:
-                col_pag1, col_pag2, col_pag3 = st.columns([1, 4, 1])
+                col_pag1, col_pag2, col_pag1_3 = st.columns([1, 4, 1])
                 with col_pag1:
                     if st.button("⬅️ Prethodna", disabled=(st.session_state["trenutna_stranica"] == 1)):
                         st.session_state["trenutna_stranica"] -= 1
                         st.rerun()
                 with col_pag2:
                     st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica} (Ukupno uneto: {ukupno_artikala} modela)</p>", unsafe_allow_html=True)
-                with col_pag3:
+                with col_pag1_3:
                     if st.button("Sledeća ➡️", disabled=(st.session_state["trenutna_stranica"] == broj_stranica)):
                         st.session_state["trenutna_stranica"] += 1
                         st.rerun()
             
-            # Isecanje podataka za trenutnu stranicu
             start_indeks = (st.session_state["trenutna_stranica"] - 1) * BROJ_ARTIKALA_PO_STRANICI
             kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
             df_za_prikaz = df_prikaz.iloc[start_indeks:kraj_indeks]
             
-            # Renderovanje odabranih 20 artikala
+            # Prikaz artikala na trenutnoj stranici
             for index, row in df_za_prikaz.iterrows():
                 sif = row['sifra']
                 boj = row['boja']
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
-                # Sliku tražimo isključivo u memoriji (nema upita ka bazi unutar petlje!)
                 if not trenutna_slika or trenutna_slika == "":
                     trenutna_slika = pronadji_sliku_u_df(df, sif)
                 
@@ -335,7 +328,6 @@ elif meni == "Trenutno stanje":
                     col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
                     with col_slika:
                         if trenutna_slika:
-                            # ⚡ Optimizacija: Cloudinary-ju tražimo malu sličicu širine 150px radi ekstremne brzine
                             mala_slika_url = trenutna_slika.replace("/upload/", "/upload/w_150,c_limit,q_auto,f_auto/")
                             st.image(mala_slika_url, width=120)
                             with st.expander("🔍 Vidi veliku sliku"):
@@ -402,7 +394,6 @@ elif meni == "Trenutno stanje":
                                         conn.commit()
                                         conn.close()
                                         
-                                        # Odmah čistimo keš da tabela povuče nove podatke
                                         ucitaj_artikle_za_sezonu.clear()
                                         st.success("Izmenjeno!")
                                         st.rerun()
@@ -417,17 +408,29 @@ elif meni == "Trenutno stanje":
                                     conn.commit()
                                     conn.close()
                                     
-                                    # Čistimo keš nakon brisanja
                                     ucitaj_artikle_za_sezonu.clear()
                                     st.warning("Obrisano!")
                                     st.rerun()
                 st.markdown("---")
+            
+            # 2. KONTROLE STRANICA NA DNU (Takođe onemogućene tokom pretrage)
+            if broj_stranica > 1 and not pretraga:
+                col_pag_dole1, col_pag_dole2, col_pag_dole3 = st.columns([1, 4, 1])
+                with col_pag_dole1:
+                    if st.button("⬅️ Prethodna ", disabled=(st.session_state["trenutna_stranica"] == 1), key="pag_dole_prev"):
+                        st.session_state["trenutna_stranica"] -= 1
+                        st.rerun()
+                with col_pag_dole2:
+                    st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica}</p>", unsafe_allow_html=True)
+                with col_pag_dole3:
+                    if st.button("Sledeća ➡️ ", disabled=(st.session_state["trenutna_stranica"] == broj_stranica), key="pag_dole_next"):
+                        st.session_state["trenutna_stranica"] += 1
+                        st.rerun()
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     
-    # Koristimo brzi keširani df za izvlačenje jedinstvenih šifara
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
     sve_sifre = sorted(df_artikli["sifra"].unique().tolist()) if not df_artikli.empty else []
     
@@ -485,7 +488,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                         conn.commit()
                         conn.close()
                         
-                        # Čistimo keš jer je promenjena količina
                         ucitaj_artikle_za_sezonu.clear()
                         
                         st.session_state["reset_brojac"] += 1
