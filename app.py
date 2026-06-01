@@ -117,8 +117,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ⚡ TRIK: Skrivena HTML oznaka (sidro) na samom vrhu aplikacije
-st.markdown("<div id='vrh_stranice'></div>", unsafe_allow_html=True)
+# ⚡ ZVANIČNI STRIP ZA SKROL NA VRH (Gura se u glavni prozor pre renderskog stabla)
+if "skroluj_na_vrh" in st.session_state and st.session_state["skroluj_na_vrh"]:
+    st.components.v1.html(
+        "<script>window.parent.document.querySelector('.stMain').scrollTo(0, 0);</script>",
+        height=0,
+        width=0,
+    )
+    st.session_state["skroluj_na_vrh"] = False
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
@@ -299,12 +305,14 @@ elif meni == "Trenutno stanje":
                 with col_pag1:
                     if st.button("⬅️ Prethodna", disabled=(st.session_state["trenutna_stranica"] == 1)):
                         st.session_state["trenutna_stranica"] -= 1
+                        st.session_state["skroluj_na_vrh"] = True
                         st.rerun()
                 with col_pag2:
                     st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica} (Ukupno uneto: {ukupno_artikala} modela)</p>", unsafe_allow_html=True)
                 with col_pag1_3:
                     if st.button("Sledeća ➡️", disabled=(st.session_state["trenutna_stranica"] == broj_stranica)):
                         st.session_state["trenutna_stranica"] += 1
+                        st.session_state["skroluj_na_vrh"] = True
                         st.rerun()
             
             start_indeks = (st.session_state["trenutna_stranica"] - 1) * BROJ_ARTIKALA_PO_STRANICI
@@ -420,21 +428,17 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1 and not pretraga:
                 col_pag_dole1, col_pag_dole2, col_pag_dole3 = st.columns([1, 4, 1])
                 
-                # ⚡ REŠENJE: Dodajemo HTML link koji glumi dugme i automatski cilja sidro '#vrh_stranice'
-                sledeca_stranica_num = st.session_state["trenutna_stranica"] + 1
-                prethodna_stranica_num = st.session_state["trenutna_stranica"] - 1
-                
                 with col_pag_dole1:
                     if st.button("⬅️ Prethodna ", disabled=(st.session_state["trenutna_stranica"] == 1), key="pag_dole_prev"):
                         st.session_state["trenutna_stranica"] -= 1
+                        st.session_state["skroluj_na_vrh"] = True
                         st.rerun()
                 with col_pag_dole2:
                     st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica}</p>", unsafe_allow_html=True)
                 with col_pag_dole3:
-                    # Kad se klikne ovo dugme na dnu, promeniće stranu i skočiti na vrh baze
                     if st.button("Sledeća ➡️ ", disabled=(st.session_state["trenutna_stranica"] == broj_stranica), key="pag_dole_next"):
                         st.session_state["trenutna_stranica"] += 1
-                        st.markdown('<slice><meta http-equiv="refresh" content="0;url=#vrh_stranice"></slice>', unsafe_allow_html=True)
+                        st.session_state["skroluj_na_vrh"] = True
                         st.rerun()
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
