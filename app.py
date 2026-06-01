@@ -151,7 +151,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ⚡ ZVANIČNI SKRIPT ZA SKROL NA VRH (Provereno radi na dugmićima i rerun-u)
+# ⚡ ZVANIČNI SKRIPT ZA SKROL NA VRH
 if "skroluj_na_vrh" in st.session_state and st.session_state["skroluj_na_vrh"]:
     st.components.v1.html(
         "<script>window.parent.document.querySelector('.stMain').scrollTo(0, 0);</script>",
@@ -190,7 +190,7 @@ if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
 
-# --- KONTROLA STRANICA NA VRHU (Glavni padajući meni) ---
+# --- KONTROLA STRANICA NA VRHU (Kompletno ispravljena logika sinhronizacije) ---
 def prikazi_gornju_paginaciju(broj_stranica, trenutna):
     if broj_stranica <= 1:
         return
@@ -207,15 +207,16 @@ def prikazi_gornju_paginaciju(broj_stranica, trenutna):
         opcije_stranica = [i for i in range(1, broj_stranica + 1)]
         
         st.markdown('<div class="skrivena-labela">', unsafe_allow_html=True)
+        # SADA INDEKS DIREKTNO ČITA STANJE, NEMA KONFLIKTNOG KLJUČA KOJI BLOKIRA STRANICU
         izbor = st.selectbox(
             "Izaberi stranicu:",
             options=opcije_stranica,
-            index=opcije_stranica.index(trenutna),
-            format_func=lambda x: f"Stranica {x} od {broj_stranica}",
-            key="glavni_gornji_izbor_stranice"
+            index=trenutna - 1,
+            format_func=lambda x: f"Stranica {x} od {broj_stranica}"
         )
         st.markdown('</div>', unsafe_allow_html=True)
         
+        # Ako je radnik promenio preko padajućeg menija
         if izbor != trenutna:
             st.session_state["trenutna_stranica"] = izbor
             st.session_state["skroluj_na_vrh"] = True
@@ -228,13 +229,12 @@ def prikazi_gornju_paginaciju(broj_stranica, trenutna):
             st.rerun()
 
 
-# --- KONTROLA STRANICA NA DNU (Samo čista i brza dugmad bez duplog boksa) ---
+# --- KONTROLA STRANICA NA DNU (Dugmad koja sigurno prebacuju i bacaju na vrh) ---
 def prikazi_donju_paginaciju(broj_stranica, trenutna):
     if broj_stranica <= 1:
         return
     st.write("")
     
-    # Dva velika, prostrana dugmeta na dnu za lakši rad prstima na telefonu
     dole_cols = st.columns(2)
     with dole_cols[0]:
         if st.button("⬅️ PRETHODNA STRANICA", disabled=(trenutna == 1), key="dole_veliko_prev"):
@@ -409,13 +409,13 @@ elif meni == "Trenutno stanje":
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
                 
-            # 1. KONTROLE STRANICA NA VRHU (Glavni selectbox)
+            # 1. KONTROLE STRANICA NA VRHU
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
                 prikazi_gornju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
                 st.write("")
             
-            # Trajni, uočljivi indikator stranice iznad tabele
+            # Trajni indikator stranice iznad tabele
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
             
@@ -528,7 +528,7 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
             
-            # 2. KONTROLE STRANICA NA DNU (Brza, stopostotno pouzdana dugmad za mobilni)
+            # 2. KONTROLE STRANICA NA DNU
             if broj_stranica > 1 and not pretraga:
                 prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
