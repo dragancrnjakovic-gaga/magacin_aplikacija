@@ -158,6 +158,26 @@ st.markdown("""
         align-items: center !important;
         flex-wrap: nowrap !important;
     }
+
+    /* FIKS ZA PUSH-OVANJE DUGMADI "SLEDEĆA" SKROZ UDESNO DO SAME IVICE BOKSA */
+    /* Pronalazimo kolone u kojima se nalaze dugmad sa ključem vrh_next i dole_veliko_next i poništavamo desni padding */
+    div[data-testid="stColumn"]:has(button[key="vrh_next"]),
+    div[data-testid="stColumn"]:has(button[key="dole_veliko_next"]) {
+        display: flex !important;
+        justify-content: flex-end !important;
+        padding-right: 0px !important;
+    }
+    
+    div[data-testid="stColumn"]:has(button[key="vrh_next"]) > div,
+    div[data-testid="stColumn"]:has(button[key="dole_veliko_next"]) > div {
+        width: auto !important;
+    }
+
+    /* Osiguravamo da dugme unutar te kolone ne zauzima 100% već se prilagođava tekstu i poravnava desno */
+    button[key="vrh_next"], button[key="dole_veliko_next"] {
+        width: max-content !important;
+        margin-left: auto !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -230,12 +250,10 @@ def prikazi_gornju_paginaciju(broj_stranica, trenutna):
             st.rerun()
             
     with pag_cols[2]:
-        st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
         if st.button("Sledeća ➡️", disabled=(trenutna == broj_stranica), key="vrh_next"):
             st.session_state["trenutna_stranica"] = trenutna + 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # --- KONTROLA STRANICA NA DNU ---
@@ -253,12 +271,10 @@ def prikazi_donju_paginaciju(broj_stranica, trenutna):
             st.rerun()
             
     with dole_cols[2]:
-        st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
         if st.button("SLEDEĆA STRANICA ➡️", disabled=(trenutna == broj_stranica), key="dole_veliko_next"):
             st.session_state["trenutna_stranica"] = trenutna + 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
