@@ -87,7 +87,7 @@ def pronadji_sliku_za_sifru(sifra):
     cursor.execute("SELECT slika_putanja FROM artikli WHERE sifra = %s AND slika_putanja != '' LIMIT 1", (sifra,))
     rezultat = cursor.fetchone()
     conn.close()
-    return rezultat[0] if rezultat else ""
+    return resultado[0] if rezultat else ""
 
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
@@ -145,7 +145,6 @@ if meni == "Unos nove robe":
         internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0, value=st.session_state["unos_internet"])
         slika = st.file_uploader("Ubaci sliku modela (Ostavi prazno ako šifra već ima sliku):", type=["jpg", "jpeg", "png"], key=f"slika_unos_{st.session_state['reset_brojac']}")
         
-    # ⚡ DODATO: Dugme je zaključano ako nedostaje BILO KOJE polje, uključujući i cene
     podaci_nedostaju = (
         sifra == "" or 
         boja is None or 
@@ -176,7 +175,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = resultado_slike = rezultat_slike["secure_url"]
+                    url_slike = rezultat_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -230,6 +229,7 @@ if meni == "Unos nove robe":
 # --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sezona: {izabrana_sezona}")
+    lista_boja = ucitaj_boje()
     
     conn = uzmi_vezu_sa_bazom()
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s", conn, params=(izabrana_sezona,))
@@ -300,6 +300,11 @@ elif meni == "Trenutno stanje":
                         ekspander = st.expander("🛠️ Izmeni / Obriši")
                         with ekspander:
                             st.write("**Uredi podatke:**")
+                            
+                            # ⚡ DODATO: Izbor nove boje unutar izmene artikla
+                            indeks_trenutne_boje = lista_boja.index(boj) if boj in lista_boja else 0
+                            nova_boja_izmena = st.selectbox("Izmeni boju artikla:", lista_boja, index=indeks_trenutne_boje, key=f"boja_{kljuc_id}")
+                            
                             nova_kol = st.number_input("Novo ukupno pari:", min_value=0, value=int(row['broj_pari']), step=1, key=f"kol_{kljuc_id}")
                             nova_p_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, value=float(row['prodajna_cena']), step=50.0, key=f"pc_{kljuc_id}")
                             nova_i_cena = st.number_input("Internet cena (RSD):", min_value=0.0, value=float(row['internet_cena']), step=50.0, key=f"ic_{kljuc_id}")
@@ -312,10 +317,11 @@ elif meni == "Trenutno stanje":
                                     if nova_slika_file is not None:
                                         with st.spinner("Menjanje slike..."):
                                             try:
+                                                # Javni ID slike vezujemo za novu boju ako je promenjena
                                                 rez_nove_slike = cloudinary.uploader.upload(
                                                     nova_slika_file,
                                                     folder="magacin/",
-                                                    public_id=f"{sif}_{boj}",
+                                                    public_id=f"{sif}_{nova_boja_izmena}",
                                                     transformation=[
                                                         {"width": 800, "crop": "limit"},
                                                         {"quality": "auto", "fetch_format": "auto"}
@@ -325,17 +331,21 @@ elif meni == "Trenutno stanje":
                                             except:
                                                 pass
                                             
-                                    conn = uzmi_vezu_sa_bazom()
-                                    cursor = conn.cursor()
-                                    cursor.execute('''
-                                        UPDATE artikli 
-                                        SET broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
-                                        WHERE sifra = %s AND boja = %s AND sezona = %s
-                                    ''', (nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, sif, boj, izabrana_sezona))
-                                    conn.commit()
-                                    conn.close()
-                                    st.success("Izmenjeno!")
-                                    st.rerun()
+                                    try:
+                                        conn = uzmi_vezu_sa_bazom()
+                                        cursor = conn.cursor()
+                                        # ⚡ Ažuriramo boju, količinu, cene i sliku na osnovu stare šifre i boje
+                                        cursor.execute('''
+                                            UPDATE artikli 
+                                            SET boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
+                                            WHERE sifra = %s AND boja = %s AND sezona = %s
+                                        ''', (nova_boja_izmena, nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, sif, boj, izabrana_sezona))
+                                        conn.commit()
+                                        conn.close()
+                                        st.success("Izmenjeno!")
+                                        st.rerun()
+                                    except psycopg2.IntegrityError:
+                                        st.error(f"Greška: Šifra '{sif}' u boji '{nova_boja_izmena}' već postoji u magacinu!")
                                     
                             with col_b2:
                                 if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
