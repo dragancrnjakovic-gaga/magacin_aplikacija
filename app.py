@@ -114,10 +114,16 @@ st.markdown("""
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
     div[data-testid="stHorizontalBlock"] { background: #1e2229; padding: 15px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #2d3139; }
+    
+    /* Stilizacija dugmadi za stranice da izgledaju lepše i kompaktnije */
+    div.stButton > button {
+        padding: 2px 10px !important;
+        font-size: 0.85rem !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# ⚡ ZVANIČNI SKRIPT ZA SKROL NA VRH (Gura se u glavni prozor pre renderskog stabla)
+# ⚡ ZVANIČNI SKRIPT ZA SKROL NA VRH
 if "skroluj_na_vrh" in st.session_state and st.session_state["skroluj_na_vrh"]:
     st.components.v1.html(
         "<script>window.parent.document.querySelector('.stMain').scrollTo(0, 0);</script>",
@@ -136,12 +142,73 @@ st.sidebar.markdown("---")
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
-# ⚡ REŠENJE: Prilikom svake promene u meniju, ako opcija nije "Trenutno stanje", resetujemo stranicu na 1
+# Resetujemo stranicu na 1 ako se promeni meni
 if meni != "Trenutno stanje":
     st.session_state["trenutna_stranica"] = 1
 
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
+
+# --- POMOĆNA FUNKCIJA ZA PRIKAZ PAMETNE PAGINACIJE (BROJEVA STRANICA) ---
+def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
+    # Generisanje logike za brojeve: uvek prikazujemo prve stranice, okolne oko trenutne i poslednju
+    vidljivi_brojevi = set()
+    
+    # Uvek prikaži prve stranice (do 10 ako smo na početku)
+    granica_pocetka = 10 if trenutna < 5 else 3
+    for i in range(1, min(granica_pocetka + 1, broj_stranica + 1)):
+        vidljivi_brojevi.add(i)
+        
+    # Prikaži stranice oko trenutne (2 ispred, 2 iza)
+    for i in range(max(1, trenutna - 2), min(broj_stranica + 1, trenutna + 3)):
+        vidljivi_brojevi.add(i)
+        
+    # Uvek prikaži poslednju stranicu
+    vidljivi_brojevi.add(broj_stranica)
+    
+    sortirani_brojevi = sorted(list(vidljivi_brojevi))
+    
+    # Pravimo dinamičke kolone u Streamlit-u za brojeve i tri tačke
+    ekran_lista = []
+    prethodni = 0
+    for br in sortirani_brojevi:
+        if br - prethodni > 1:
+            ekran_lista.append("...")
+        ekran_lista.append(br)
+        prethodni = br
+
+    # Kreiramo kolone: za svaku stavku po jedna uska kolona
+    cols = st.columns(len(ekran_lista) + 2)
+    
+    # 1. Strelica za prethodnu
+    with cols[0]:
+        if st.button("⬅️", disabled=(trenutna == 1), key=f"{kljuc_prefiks}_prev"):
+            st.session_state["trenutna_stranica"] = trenutna - 1
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
+            
+    # 2. Brojevi i tri tačke
+    trenutna_kol_indeks = 1
+    for stavka in ekran_lista:
+        with cols[trenutna_kol_indeks]:
+            if stavka == "...":
+                st.write("<p style='margin-top:5px; text-align:center; color:gray;'>...</p>", unsafe_allow_html=True)
+            else:
+                # Ako je to trenutna stranica, bojimo dugme u "primary" stil (crveno/plavo zavisno od teme)
+                tip_dugmeta = "primary" if stavka == trenutna else "secondary"
+                if st.button(str(stavka), type=tip_dugmeta, key=f"{kljuc_prefiks}_str_{stavka}"):
+                    st.session_state["trenutna_stranica"] = stavka
+                    st.session_state["skroluj_na_vrh"] = True
+                    st.rerun()
+        trenutna_kol_indeks += 1
+        
+    # 3. Strelica za sledeću
+    with cols[trenutna_kol_indeks]:
+        if st.button("➡️", disabled=(trenutna == broj_stranica), key=f"{kljuc_prefiks}_next"):
+            st.session_state["trenutna_stranica"] = trenutna + 1
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
+
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
 if meni == "Unos nove robe":
@@ -200,7 +267,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = resultado_slike["secure_url"]
+                    url_slike = rezultat_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -303,21 +370,11 @@ elif meni == "Trenutno stanje":
             if "trenutna_stranica" not in st.session_state or pretraga != "":
                 st.session_state["trenutna_stranica"] = 1
                 
-            # 1. KONTROLE STRANICA NA VRHU
+            # 1. KONTROLE STRANICA NA VRHU (Zamenjeno pametnim brojevima)
             if broj_stranica > 1 and not pretraga:
-                col_pag1, col_pag2, col_pag1_3 = st.columns([1, 4, 1])
-                with col_pag1:
-                    if st.button("⬅️ Prethodna", disabled=(st.session_state["trenutna_stranica"] == 1)):
-                        st.session_state["trenutna_stranica"] -= 1
-                        st.session_state["skroluj_na_vrh"] = True
-                        st.rerun()
-                with col_pag2:
-                    st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica} (Ukupno uneto: {ukupno_artikala} modela)</p>", unsafe_allow_html=True)
-                with col_pag1_3:
-                    if st.button("Sledeća ➡️", disabled=(st.session_state["trenutna_stranica"] == broj_stranica)):
-                        st.session_state["trenutna_stranica"] += 1
-                        st.session_state["skroluj_na_vrh"] = True
-                        st.rerun()
+                st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
+                prikazi_brojeve_stranica(broj_stranica, st.session_state["trenutna_stranica"], "vrh")
+                st.write("")
             
             start_indeks = (st.session_state["trenutna_stranica"] - 1) * BROJ_ARTIKALA_PO_STRANICI
             kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
@@ -428,22 +485,9 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
             
-            # 2. KONTROLE STRANICA NA DNU
+            # 2. KONTROLE STRANICA NA DNU (Zamenjeno pametnim brojevima)
             if broj_stranica > 1 and not pretraga:
-                col_pag_dole1, col_pag_dole2, col_pag_dole3 = st.columns([1, 4, 1])
-                
-                with col_pag_dole1:
-                    if st.button("⬅️ Prethodna ", disabled=(st.session_state["trenutna_stranica"] == 1), key="pag_dole_prev"):
-                        st.session_state["trenutna_stranica"] -= 1
-                        st.session_state["skroluj_na_vrh"] = True
-                        st.rerun()
-                with col_pag_dole2:
-                    st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica}</p>", unsafe_allow_html=True)
-                with col_pag_dole3:
-                    if st.button("Sledeća ➡️ ", disabled=(st.session_state["trenutna_stranica"] == broj_stranica), key="pag_dole_next"):
-                        st.session_state["trenutna_stranica"] += 1
-                        st.session_state["skroluj_na_vrh"] = True
-                        st.rerun()
+                prikazi_brojeve_stranica(broj_stranica, st.session_state["trenutna_stranica"], "dole")
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
