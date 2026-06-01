@@ -413,7 +413,7 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
             
-            # 2. KONTROLE STRANICA NA DNU (Takođe onemogućene tokom pretrage)
+            # 2. KONTROLE STRANICA NA DNU
             if broj_stranica > 1 and not pretraga:
                 col_pag_dole1, col_pag_dole2, col_pag_dole3 = st.columns([1, 4, 1])
                 with col_pag_dole1:
@@ -426,6 +426,20 @@ elif meni == "Trenutno stanje":
                     if st.button("Sledeća ➡️ ", disabled=(st.session_state["trenutna_stranica"] == broj_stranica), key="pag_dole_next"):
                         st.session_state["trenutna_stranica"] += 1
                         st.rerun()
+                        
+            # ⚡ JAVASCRIPT TRIK ZA AUTOMATSKI SKROL NA VRH EKRANA ⚡
+            st.components.v1.html(
+                """
+                <script>
+                    var parentWindow = window.parent;
+                    if (parentWindow) {
+                        parentWindow.scrollTo({top: 0, behavior: 'auto'});
+                    }
+                </script>
+                """,
+                height=0,
+                width=0
+            )
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
