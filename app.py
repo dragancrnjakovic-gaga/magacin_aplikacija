@@ -87,7 +87,7 @@ def pronadji_sliku_za_sifru(sifra):
     cursor.execute("SELECT slika_putanja FROM artikli WHERE sifra = %s AND slika_putanja != '' LIMIT 1", (sifra,))
     rezultat = cursor.fetchone()
     conn.close()
-    return resultado[0] if rezultat else ""
+    return rezultat[0] if rezultat else ""
 
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
@@ -111,8 +111,9 @@ st.markdown("""
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
-# 1. SEZONA
-izabrana_sezona = st.sidebar.radio("🌸 IZABERI SEZONU:", ["Proleće-Leto", "Jesen-Zima"])
+# 1. KATEGORIJA / SEZONA
+# ⚡ DODATO: Opcija "Torbe" u bočni meni
+izabrana_sezona = st.sidebar.radio("🌸 IZABERI KATEGORIJU / SEZONU:", ["Proleće-Leto", "Jesen-Zima", "Torbe"])
 st.sidebar.markdown("---")
 
 # 2. FUNKCIJA
@@ -138,8 +139,12 @@ if meni == "Unos nove robe":
     with col1:
         sifra = st.text_input("Šifra modela:", value=st.session_state["unos_sifra"]).strip().upper()
         boja = st.selectbox("Boja modela:", lista_boja, index=lista_boja.index(st.session_state["unos_boja"]) if st.session_state["unos_boja"] in lista_boja else 0)
-        broj_pari = st.number_input("Količina pari:", min_value=0, step=1, value=st.session_state["unos_kolicina"])
-        pari_u_kutiji = st.number_input("Broj pari u jednoj kutiji:", min_value=1, step=1, value=st.session_state["unos_kutija"])
+        # Prilagođen tekst labela za količinu ako su izabrane torbe (komada umesto pari)
+        labela_kol = "Količina (komada/pari):" if izabrana_sezona == "Torbe" else "Količina pari:"
+        labela_kut = "Broj komada u jednoj kutiji/pakovanju:" if izabrana_sezona == "Torbe" else "Broj pari u jednoj kutiji:"
+        
+        broj_pari = st.number_input(labela_kol, min_value=0, step=1, value=st.session_state["unos_kolicina"])
+        pari_u_kutiji = st.number_input(labela_kut, min_value=1, step=1, value=st.session_state["unos_kutija"])
     with col2:
         prodajna_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=st.session_state["unos_prodajna"])
         internet_cena = st.number_input("Internet cena (RSD):", min_value=0.0, step=50.0, value=st.session_state["unos_internet"])
@@ -159,7 +164,7 @@ if meni == "Unos nove robe":
     dugme_potvrdi = st.button("Sačuvaj artikal u bazu", type="primary", disabled=podaci_nedostaju)
     
     if podaci_nedostaju:
-        st.caption("⚠️ Dugme će postati aktivno kada popunite Šifru, Boju, Količinu pari, Broj pari u kutiji i obe Cene.")
+        st.caption("⚠️ Dugme će postati aktivno kada popunite Šifru, Boju, Količinu, Pakovanje i obe Cene.")
         
     if dugme_potvrdi:
         url_slike = ""
@@ -203,7 +208,7 @@ if meni == "Unos nove robe":
             st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}'!")
             st.rerun()
         except psycopg2.IntegrityError:
-            st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u bazi!")
+            st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u ovoj sekciji!")
 
     st.markdown("---")
     st.subheader("🎨 Upravljanje listom boja")
@@ -228,7 +233,7 @@ if meni == "Unos nove robe":
 
 # --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
-    st.header(f"📋 Stanje robe - Sezona: {izabrana_sezona}")
+    st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
     
     conn = uzmi_vezu_sa_bazom()
@@ -236,14 +241,18 @@ elif meni == "Trenutno stanje":
     conn.close()
     
     if df.empty:
-        st.info(f"U sezoni {izabrana_sezona} trenutno nema unete robe.")
+        st.info(f"U sekciji {izabrana_sezona} trenutno nema unete robe.")
     else:
         df_excel = df.copy()
         df_excel["Broj kutija"] = df_excel["broj_pari"] // df_excel["pari_u_kutiji"]
-        df_excel["Ostatak pari"] = df_excel["broj_pari"] % df_excel["pari_u_kutiji"]
+        df_excel["Ostatak"] = df_excel["broj_pari"] % df_excel["pari_u_kutiji"]
+        
+        relabel_kom = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari"
+        relabel_kut = "Kutija/Pakovanja" if izabrana_sezona == "Torbe" else "Pari u kutiji"
+        
         df_excel = df_excel.rename(columns={
-            "sifra": "Šifra modela", "boja": "Boja", "sezona": "Sezona", 
-            "broj_pari": "Ukupno pari", "pari_u_kutiji": "Pari u kutiji",
+            "sifra": "Šifra modela", "boja": "Boja", "sezona": "Kategorija", 
+            "broj_pari": relabel_kom, "pari_u_kutiji": relabel_kut,
             "prodajna_cena": "Prodajna cena (RSD)", "internet_cena": "Internet cena (RSD)"
         }).drop(columns=["slika_putanja"], errors="ignore")
         
@@ -251,12 +260,12 @@ elif meni == "Trenutno stanje":
         st.download_button(
             label="🟢 Preuzmi stanje kao Excel tabelu (.xlsx)",
             data=excel_podaci,
-            file_name=f"stanje_magacina_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            file_name=f"stanje_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
         st.markdown("---")
-        pretraga = st.text_input("🔍 Pretraži ovu sezonu po šifri modela:", "").strip().upper()
+        pretraga = st.text_input("🔍 Pretraži ovu sekciju po šifri modela:", "").strip().upper()
         if pretraga:
             df = df[df["sifra"].str.contains(pretraga, na=False)]
         
@@ -291,8 +300,14 @@ elif meni == "Trenutno stanje":
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Ukupno pari na stanju", f"{row['broj_pari']} kom")
-                        c2.metric("Pakovanje", f"{br_kutija} kut. + {ost_pari} par")
+                        
+                        m_kol_label = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari na stanju"
+                        m_pak_label = "Pakovanje (kut. + kom)" if izabrana_sezona == "Torbe" else "Pakovanje"
+                        m_sufiks = "kom" if izabrana_sezona == "Torbe" else "kom"
+                        m_pak_sufiks = f"{br_kutija} pak. + {ost_pari} kom" if izabrana_sezona == "Torbe" else f"{br_kutija} kut. + {ost_pari} par"
+                        
+                        c1.metric(m_kol_label, f"{row['broj_pari']} {m_sufiks}")
+                        c2.metric(m_pak_label, m_pak_sufiks)
                         c3.metric("Prodajna cena", f"{p_cena_int} din")
                         c4.metric("Internet cena", f"{i_cena_int} din")
                         
@@ -301,11 +316,11 @@ elif meni == "Trenutno stanje":
                         with ekspander:
                             st.write("**Uredi podatke:**")
                             
-                            # ⚡ DODATO: Izbor nove boje unutar izmene artikla
                             indeks_trenutne_boje = lista_boja.index(boj) if boj in lista_boja else 0
                             nova_boja_izmena = st.selectbox("Izmeni boju artikla:", lista_boja, index=indeks_trenutne_boje, key=f"boja_{kljuc_id}")
                             
-                            nova_kol = st.number_input("Novo ukupno pari:", min_value=0, value=int(row['broj_pari']), step=1, key=f"kol_{kljuc_id}")
+                            labela_izmena_kol = "Novo ukupno komada:" if izabrana_sezona == "Torbe" else "Novo ukupno pari:"
+                            nova_kol = st.number_input(labela_izmena_kol, min_value=0, value=int(row['broj_pari']), step=1, key=f"kol_{kljuc_id}")
                             nova_p_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, value=float(row['prodajna_cena']), step=50.0, key=f"pc_{kljuc_id}")
                             nova_i_cena = st.number_input("Internet cena (RSD):", min_value=0.0, value=float(row['internet_cena']), step=50.0, key=f"ic_{kljuc_id}")
                             nova_slika_file = st.file_uploader("Zameni sliku artikla:", type=["jpg", "jpeg", "png"], key=f"img_{kljuc_id}")
@@ -317,7 +332,6 @@ elif meni == "Trenutno stanje":
                                     if nova_slika_file is not None:
                                         with st.spinner("Menjanje slike..."):
                                             try:
-                                                # Javni ID slike vezujemo za novu boju ako je promenjena
                                                 rez_nove_slike = cloudinary.uploader.upload(
                                                     nova_slika_file,
                                                     folder="magacin/",
@@ -334,7 +348,6 @@ elif meni == "Trenutno stanje":
                                     try:
                                         conn = uzmi_vezu_sa_bazom()
                                         cursor = conn.cursor()
-                                        # ⚡ Ažuriramo boju, količinu, cene i sliku na osnovu stare šifre i boje
                                         cursor.execute('''
                                             UPDATE artikli 
                                             SET boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
@@ -345,7 +358,7 @@ elif meni == "Trenutno stanje":
                                         st.success("Izmenjeno!")
                                         st.rerun()
                                     except psycopg2.IntegrityError:
-                                        st.error(f"Greška: Šifra '{sif}' u boji '{nova_boja_izmena}' već postoji u magacinu!")
+                                        st.error(f"Greška: Šifra '{sif}' u boji '{nova_boja_izmena}' već postoji u ovoj sekciji!")
                                     
                             with col_b2:
                                 if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
@@ -360,7 +373,7 @@ elif meni == "Trenutno stanje":
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
-    st.header(f"📆 Dnevni izlaz robe - Sezona: {izabrana_sezona}")
+    st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
@@ -369,7 +382,7 @@ elif meni == "Evidencija izlaza (Po danima)":
     conn.close()
     
     if not sve_sifre:
-        st.info(f"Nema unete robe u sezoni {izabrana_sezona} da biste zabeležili izlaz.")
+        st.info(f"Nema unete robe u sekciji {izabrana_sezona} da biste zabeležili izlaz.")
     else:
         col1, col2 = st.columns(2)
         with col1:
@@ -390,16 +403,18 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor = conn.cursor()
                 cursor.execute("SELECT broj_pari FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (izabrana_sifra, izabrana_boja, izabrana_sezona))
                 rezultat = cursor.fetchone()
-                if rezultat:
+                if resultado = rezultat:
                     current_stanje = rezultat[0]
                 conn.close()
             
             st.write("")
-            st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{current_stanje} pari**")
+            sufiks_stanje = "komada" if izabrana_sezona == "Torbe" else "pari"
+            st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{current_stanje} {sufiks_stanje}**")
             
             dinamicki_kljuc = f"izlaz_pari_input_{st.session_state['reset_brojac']}"
+            labela_izlaz_unos = "Letimičan unos količine za izlaz (kom):" if izabrana_sezona == "Torbe" else "Letimičan unos količine za izlaz:"
             kolicina_izlaza = st.number_input(
-                "Letimičan unos količine za izlaz:", 
+                labela_izlaz_unos, 
                 min_value=1, max_value=max(1, current_stanje), 
                 step=1, value=None, key=dinamicki_kljuc
             )
@@ -408,7 +423,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         
         if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz", disabled=dugme_onemoguceno):
             if kolicina_izlaza is None or current_stanje < kolicina_izlaza or current_stanje == 0:
-                st.error("Greška: Nemate dovoljno pari na stanju!")
+                st.error("Greška: Nemate dovoljno količine na stanju!")
             else:
                 with st.spinner("Zapisivanje u toku..."):
                     try:
@@ -429,13 +444,13 @@ elif meni == "Evidencija izlaza (Po danima)":
                         conn.close()
                         
                         st.session_state["reset_brojac"] += 1
-                        st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} pari.")
+                        st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} {sufiks_stanje}.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Sistemska greška pri upisu: {e}")
 
         st.markdown("---")
-        st.subheader(f"📋 Istorija dnevnih izlaza robe za sezonu: {izabrana_sezona}")
+        st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
         
         conn = uzmi_vezu_sa_bazom()
         upit_istorija = '''
@@ -443,7 +458,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                 ir.datum AS "Datum", 
                 ir.sifra_artikla AS "Šifra modela", 
                 ir.boja_artikla AS "Boja", 
-                ir.kolicina_izlaz AS "Izašlo (pari)" 
+                ir.kolicina_izlaz AS "Izašlo" 
             FROM izlaz_robe ir
             INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
             WHERE a.sezona = %s
@@ -469,10 +484,10 @@ elif meni == "Evidencija izlaza (Po danima)":
             st.download_button(
                 label=f"🟢 Preuzmi Excel za period ({od_datuma.strftime('%d.%m.%Y.')} - {do_datuma.strftime('%d.%m.%Y.')})",
                 data=excel_izlazi,
-                file_name=f"izlazi_robe_{izabrana_sezona}_{od_str}_do_{do_str}.xlsx",
+                file_name=f"izlazi_{izabrana_sezona}_{od_str}_do_{do_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dugme_download_excel_izlazi"
             )
             st.dataframe(df_izlazi, use_container_width=True)
         else:
-            st.write(f"Još uvek nema zabeleženih izlaza robe za sezonu {izabrana_sezona}.")
+            st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
