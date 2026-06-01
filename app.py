@@ -148,6 +148,16 @@ st.markdown("""
         margin-bottom: 15px;
         display: inline-block;
     }
+
+    /* Osigurava da paginacija uvek ostane u jednom horizontalnom redu, čak i na telefonima */
+    [data-testid="stHorizontalBlock"]:has(button[key^="vrh_"]),
+    [data-testid="stHorizontalBlock"]:has(button[key^="dole_"]) {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        flex-wrap: nowrap !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -190,12 +200,12 @@ if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
 
-# --- KONTROLA STRANICA NA VRHU (Kompletno ispravljena logika sinhronizacije) ---
+# --- KONTROLA STRANICA NA VRHU ---
 def prikazi_gornju_paginaciju(broj_stranica, trenutna):
     if broj_stranica <= 1:
         return
         
-    pag_cols = st.columns([1, 3, 1])
+    pag_cols = st.columns([1, 2, 1])
     
     with pag_cols[0]:
         if st.button("⬅️ Prethodna", disabled=(trenutna == 1), key="vrh_prev"):
@@ -205,9 +215,7 @@ def prikazi_gornju_paginaciju(broj_stranica, trenutna):
             
     with pag_cols[1]:
         opcije_stranica = [i for i in range(1, broj_stranica + 1)]
-        
         st.markdown('<div class="skrivena-labela">', unsafe_allow_html=True)
-        # SADA INDEKS DIREKTNO ČITA STANJE, NEMA KONFLIKTNOG KLJUČA KOJI BLOKIRA STRANICU
         izbor = st.selectbox(
             "Izaberi stranicu:",
             options=opcije_stranica,
@@ -216,36 +224,41 @@ def prikazi_gornju_paginaciju(broj_stranica, trenutna):
         )
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Ako je radnik promenio preko padajućeg menija
         if izbor != trenutna:
             st.session_state["trenutna_stranica"] = izbor
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
             
     with pag_cols[2]:
+        st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
         if st.button("Sledeća ➡️", disabled=(trenutna == broj_stranica), key="vrh_next"):
             st.session_state["trenutna_stranica"] = trenutna + 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
-# --- KONTROLA STRANICA NA DNU (Dugmad koja sigurno prebacuju i bacaju na vrh) ---
+# --- KONTROLA STRANICA NA DNU ---
 def prikazi_donju_paginaciju(broj_stranica, trenutna):
     if broj_stranica <= 1:
         return
     st.write("")
     
-    dole_cols = st.columns(2)
+    dole_cols = st.columns([1.5, 4, 1.5])
+    
     with dole_cols[0]:
         if st.button("⬅️ PRETHODNA STRANICA", disabled=(trenutna == 1), key="dole_veliko_prev"):
             st.session_state["trenutna_stranica"] = trenutna - 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
-    with dole_cols[1]:
+            
+    with dole_cols[2]:
+        st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
         if st.button("SLEDEĆA STRANICA ➡️", disabled=(trenutna == broj_stranica), key="dole_veliko_next"):
             st.session_state["trenutna_stranica"] = trenutna + 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
@@ -405,7 +418,6 @@ elif meni == "Trenutno stanje":
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
-            # Ako je pretraga aktivna ili je stranica van opsega, resetuj na 1
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
                 
