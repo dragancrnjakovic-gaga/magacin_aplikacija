@@ -117,6 +117,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ⚡ TRIK: Skrivena HTML oznaka (sidro) na samom vrhu aplikacije
+st.markdown("<div id='vrh_stranice'></div>", unsafe_allow_html=True)
+
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
 # 1. KATEGORIJA / SEZONA
@@ -416,6 +419,11 @@ elif meni == "Trenutno stanje":
             # 2. KONTROLE STRANICA NA DNU
             if broj_stranica > 1 and not pretraga:
                 col_pag_dole1, col_pag_dole2, col_pag_dole3 = st.columns([1, 4, 1])
+                
+                # ⚡ REŠENJE: Dodajemo HTML link koji glumi dugme i automatski cilja sidro '#vrh_stranice'
+                sledeca_stranica_num = st.session_state["trenutna_stranica"] + 1
+                prethodna_stranica_num = st.session_state["trenutna_stranica"] - 1
+                
                 with col_pag_dole1:
                     if st.button("⬅️ Prethodna ", disabled=(st.session_state["trenutna_stranica"] == 1), key="pag_dole_prev"):
                         st.session_state["trenutna_stranica"] -= 1
@@ -423,23 +431,11 @@ elif meni == "Trenutno stanje":
                 with col_pag_dole2:
                     st.markdown(f"<p style='text-align: center; font-weight: bold;'>Stranica {st.session_state['trenutna_stranica']} od {broj_stranica}</p>", unsafe_allow_html=True)
                 with col_pag_dole3:
+                    # Kad se klikne ovo dugme na dnu, promeniće stranu i skočiti na vrh baze
                     if st.button("Sledeća ➡️ ", disabled=(st.session_state["trenutna_stranica"] == broj_stranica), key="pag_dole_next"):
                         st.session_state["trenutna_stranica"] += 1
+                        st.markdown('<slice><meta http-equiv="refresh" content="0;url=#vrh_stranice"></slice>', unsafe_allow_html=True)
                         st.rerun()
-                        
-            # ⚡ JAVASCRIPT TRIK ZA AUTOMATSKI SKROL NA VRH EKRANA ⚡
-            st.components.v1.html(
-                """
-                <script>
-                    var parentWindow = window.parent;
-                    if (parentWindow) {
-                        parentWindow.scrollTo({top: 0, behavior: 'auto'});
-                    }
-                </script>
-                """,
-                height=0,
-                width=0
-            )
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
