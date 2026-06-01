@@ -131,7 +131,7 @@ st.markdown("""
         height: 38px !important;
     }
     
-    /* Sakrivanje labele iznad selectbox-a u paginaciji da bi sve bilo u jednoj liniji */
+    /* Sakrivanje labele iznad selectbox-a u paginaciji */
     div.skrivena-labela label {
         display: none !important;
     }
@@ -151,7 +151,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ⚡ ZVANIČNI SKRIPT ZA SKROL NA VRH
+# ⚡ ZVANIČNI SKRIPT ZA SKROL NA VRH (Provereno radi na dugmićima i rerun-u)
 if "skroluj_na_vrh" in st.session_state and st.session_state["skroluj_na_vrh"]:
     st.components.v1.html(
         "<script>window.parent.document.querySelector('.stMain').scrollTo(0, 0);</script>",
@@ -190,53 +190,59 @@ if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
 
-# --- FUNKCIJE ZA SINHRONIZACIJU BOKSOVA ZA PAGINACIJU ---
-def promene_na_gornjem_boksu():
-    if f"vrh_select_str" in st.session_state:
-        izbor = int(st.session_state["vrh_select_str"].split(" ")[1])
-        st.session_state["trenutna_stranica"] = izbor
-        st.session_state["skroluj_na_vrh"] = True
-
-def promene_na_donjem_boksu():
-    if f"dole_select_str" in st.session_state:
-        izbor = int(st.session_state["dole_select_str"].split(" ")[1])
-        st.session_state["trenutna_stranica"] = izbor
-        st.session_state["skroluj_na_vrh"] = True
-
-
-# --- MOBILNO OPTIMIZOVANA I SINHRONIZOVANA PAGINACIJA ---
-def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
+# --- KONTROLA STRANICA NA VRHU (Glavni padajući meni) ---
+def prikazi_gornju_paginaciju(broj_stranica, trenutna):
     if broj_stranica <= 1:
         return
         
     pag_cols = st.columns([1, 3, 1])
     
     with pag_cols[0]:
-        if st.button("⬅️", disabled=(trenutna == 1), key=f"{kljuc_prefiks}_prev"):
+        if st.button("⬅️ Prethodna", disabled=(trenutna == 1), key="vrh_prev"):
             st.session_state["trenutna_stranica"] = trenutna - 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
             
     with pag_cols[1]:
-        # Formiramo tekstualne opcije tipa: "Stranica 1 od 21"
-        tekstualne_opcije = [f"Stranica {i} od {broj_stranica}" for i in range(1, broj_stranica + 1)]
-        trenutni_tekst = f"Stranica {trenutna} od {broj_stranica}"
-        
-        # Određujemo callback funkciju u zavisnosti od pozicije boksa
-        funkcija_okidac = promene_na_gornjem_boksu if kljuc_prefiks == "vrh" else promene_na_donjem_boksu
+        opcije_stranica = [i for i in range(1, broj_stranica + 1)]
         
         st.markdown('<div class="skrivena-labela">', unsafe_allow_html=True)
-        st.selectbox(
+        izbor = st.selectbox(
             "Izaberi stranicu:",
-            options=tekstualne_opcije,
-            index=trenutna - 1,
-            key=f"{kljuc_prefiks}_select_str",
-            on_change=funkcija_okidac
+            options=opcije_stranica,
+            index=opcije_stranica.index(trenutna),
+            format_func=lambda x: f"Stranica {x} od {broj_stranica}",
+            key="glavni_gornji_izbor_stranice"
         )
         st.markdown('</div>', unsafe_allow_html=True)
+        
+        if izbor != trenutna:
+            st.session_state["trenutna_stranica"] = izbor
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
             
     with pag_cols[2]:
-        if st.button("➡️", disabled=(trenutna == broj_stranica), key=f"{kljuc_prefiks}_next"):
+        if st.button("Sledeća ➡️", disabled=(trenutna == broj_stranica), key="vrh_next"):
+            st.session_state["trenutna_stranica"] = trenutna + 1
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
+
+
+# --- KONTROLA STRANICA NA DNU (Samo čista i brza dugmad bez duplog boksa) ---
+def prikazi_donju_paginaciju(broj_stranica, trenutna):
+    if broj_stranica <= 1:
+        return
+    st.write("")
+    
+    # Dva velika, prostrana dugmeta na dnu za lakši rad prstima na telefonu
+    dole_cols = st.columns(2)
+    with dole_cols[0]:
+        if st.button("⬅️ PRETHODNA STRANICA", disabled=(trenutna == 1), key="dole_veliko_prev"):
+            st.session_state["trenutna_stranica"] = trenutna - 1
+            st.session_state["skroluj_na_vrh"] = True
+            st.rerun()
+    with dole_cols[1]:
+        if st.button("SLEDEĆA STRANICA ➡️", disabled=(trenutna == broj_stranica), key="dole_veliko_next"):
             st.session_state["trenutna_stranica"] = trenutna + 1
             st.session_state["skroluj_na_vrh"] = True
             st.rerun()
@@ -403,12 +409,13 @@ elif meni == "Trenutno stanje":
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
                 
-            # 1. KONTROLE STRANICA NA VRHU
+            # 1. KONTROLE STRANICA NA VRHU (Glavni selectbox)
             if broj_stranica > 1 and not pretraga:
-                prikazi_brojeve_stranica(broj_stranica, st.session_state["trenutna_stranica"], "vrh")
+                st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
+                prikazi_gornju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
                 st.write("")
             
-            # NOVI ZAHTEV: Jasan indikator trenutne stranice iznad same tabele
+            # Trajni, uočljivi indikator stranice iznad tabele
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
             
@@ -521,9 +528,9 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
             
-            # 2. KONTROLE STRANICA NA DNU
+            # 2. KONTROLE STRANICA NA DNU (Brza, stopostotno pouzdana dugmad za mobilni)
             if broj_stranica > 1 and not pretraga:
-                prikazi_brojeve_stranica(broj_stranica, st.session_state["trenutna_stranica"], "dole")
+                prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
