@@ -113,37 +113,47 @@ st.markdown("""
     .stTextInput p, .stNumberInput p, .stSelectbox p, .stDateInput p, label p { font-size: 0.85rem !important; }
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
-    div[data-testid="stHorizontalBlock"] { background: #1e2229; padding: 15px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #2d3139; }
     
-    /* 📱 MOĆAN CSS ZA HORIZONTALNU PAGINACIJU NA MOBILNOM */
-    .flex-paginacija {
+    /* Globalni stil za kartice artikala na stanju */
+    div[data-testid="stHorizontalBlock"] { 
+        background: #1e2229; 
+        padding: 15px; 
+        border-radius: 6px; 
+        margin-bottom: 10px; 
+        border: 1px solid #2d3139; 
+    }
+    
+    /* 🔥 KRAJNJE REŠENJE ZA TELEFONE: Presrećemo samu Streamlitovu strukturu kolona unutar paginacije */
+    div.zona-paginacije div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         justify-content: flex-start !important;
         align-items: center !important;
-        gap: 8px !important;
-        overflow-x: auto !important; /* Omogućava horizontalni swipe prstom */
-        padding: 10px 5px !important;
-        white-space: nowrap !important;
-        -webkit-overflow-scrolling: touch;
+        overflow-x: auto !important; /* Dozvoli swipe prstom levo-desno */
+        overflow-y: hidden !important;
+        gap: 6px !important;
+        padding: 10px !important;
+        background: #1e2229 !important;
     }
     
-    /* Sakrivamo ružan scrollbar na telefonima da izgleda čisto */
-    .flex-paginacija::-webkit-scrollbar {
-        display: none;
-    }
-    
-    /* Prisiljavamo Streamlit dugmad unutar ovog kontejnera da ostanu u liniji */
-    .flex-paginacija div[data-testid="stBlock"] {
-        min-width: auto !important;
+    /* Sprečavamo da se pojedinačni dugmići skupe na nulu ili prebace dole */
+    div.zona-paginacije div[data-testid="stHorizontalBlock"] > div {
         flex: 0 0 auto !important;
+        min-width: auto !important;
+        width: auto !important;
     }
     
+    /* Sakrivanje scrollbar trake radi lepšeg izgleda */
+    div.zona-paginacije div[data-testid="stHorizontalBlock"]::-webkit-scrollbar {
+        display: none !important;
+    }
+    
+    /* Kompaktna podešavanja same dugmadi */
     div.stButton > button {
-        padding: 4px 12px !important;
+        padding: 2px 10px !important;
         font-size: 0.85rem !important;
-        min-width: 42px !important;
+        min-width: 40px !important;
         height: 38px !important;
         text-align: center !important;
     }
@@ -176,7 +186,7 @@ if meni != "Trenutno stanje":
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
-# --- UNAPREĐENA FUNKCIJA ZA PRIKAZ PAGINACIJE (FLEXBOX OTPORAN NA MOBILNE) ---
+# --- UNAPREĐENA FUNKCIJA ZA PRIKAZ PAGINACIJE (SADA STRIKTNO RADI NA SVIM TELEFONIMA) ---
 def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
     vidljivi_brojevi = set()
     
@@ -206,10 +216,9 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
         ekran_lista.append(br)
         prethodni = br
 
-    # Koristimo HTML div sa našom novom klasom "flex-paginacija" koja drži sve u jednom redu
-    st.markdown('<div class="flex-paginacija">', unsafe_allow_html=True)
+    # 👇 Pakujemo ceo blok u HTML klasu "zona-paginacije" koju naš CSS na vrhu precizno kontroliše
+    st.markdown('<div class="zona-paginacije">', unsafe_allow_html=True)
     
-    # Kreiramo tačan broj mikro-kolona unutar tog kontejnera
     cols = st.columns(len(ekran_lista) + 2)
     
     # 1. Leva strelica
@@ -224,8 +233,7 @@ def prikazi_brojeve_stranica(broj_stranica, trenutna, kljuc_prefiks):
     for stavka in ekran_lista:
         with cols[trenutna_kol_indeks]:
             if stavka == "...":
-                # Stilizovan separator koji ne lomi red
-                st.write('<div style="display:inline-block; min-width:25px; text-align:center; color:gray; font-weight:bold; line-height:38px;">...</div>', unsafe_allow_html=True)
+                st.write('<div style="display:inline-block; min-width:20px; text-align:center; color:gray; font-weight:bold; line-height:38px;">...</div>', unsafe_allow_html=True)
             else:
                 tip_dugmeta = "primary" if stavka == trenutna else "secondary"
                 if st.button(str(stavka), type=tip_dugmeta, key=f"{kljuc_prefiks}_str_{stavka}"):
