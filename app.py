@@ -117,7 +117,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ⚡ ZVANIČNI STRIP ZA SKROL NA VRH (Gura se u glavni prozor pre renderskog stabla)
+# ⚡ ZVANIČNI SKRIPT ZA SKROL NA VRH (Gura se u glavni prozor pre renderskog stabla)
 if "skroluj_na_vrh" in st.session_state and st.session_state["skroluj_na_vrh"]:
     st.components.v1.html(
         "<script>window.parent.document.querySelector('.stMain').scrollTo(0, 0);</script>",
@@ -135,6 +135,10 @@ st.sidebar.markdown("---")
 # 2. FUNKCIJA
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
+
+# ⚡ REŠENJE: Prilikom svake promene u meniju, ako opcija nije "Trenutno stanje", resetujemo stranicu na 1
+if meni != "Trenutno stanje":
+    st.session_state["trenutna_stranica"] = 1
 
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
@@ -196,7 +200,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = rezultat_slike["secure_url"]
+                    url_slike = resultado_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
