@@ -497,6 +497,9 @@ elif meni == "Trenutno stanje":
                         with ekspander:
                             st.write("**Uredi podatke:**")
                             
+                            # --- DODATO: Polje za izmenu šifre modela ---
+                            nova_sifra_izmena = st.text_input("Izmeni šifru modela:", value=sif, key=f"sifra_izm_{kljuc_id}").strip().upper()
+                            
                             indeks_trenutne_boje = lista_boja.index(boj) if boj in lista_boja else 0
                             nova_boja_izmena = st.selectbox("Izmeni boju artikla:", lista_boja, index=indeks_trenutne_boje, key=f"boja_{kljuc_id}")
                             
@@ -509,40 +512,45 @@ elif meni == "Trenutno stanje":
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
-                                    finalna_putanja_slike = row["slika_putanja"]
-                                    if nova_slika_file is not None:
-                                        with st.spinner("Menjanje slike..."):
-                                            try:
-                                                rez_nove_slike = cloudinary.uploader.upload(
-                                                    nova_slika_file,
-                                                    folder="magacin/",
-                                                    public_id=f"{sif}_{nova_boja_izmena}",
-                                                    transformation=[
-                                                        {"width": 800, "crop": "limit"},
-                                                        {"quality": "auto", "fetch_format": "auto"}
-                                                    ]
-                                                )
-                                                finalna_putanja_slike = rez_nove_slike["secure_url"]
-                                            except:
-                                                pass
+                                    # Provera da li je uneta prazna šifra
+                                    if nova_sifra_izmena == "":
+                                        st.error("Šifra modela ne može biti prazna!")
+                                    else:
+                                        finalna_putanja_slike = row["slika_putanja"]
+                                        if nova_slika_file is not None:
+                                            with st.spinner("Menjanje slike..."):
+                                                try:
+                                                    rez_nove_slike = cloudinary.uploader.upload(
+                                                        nova_slika_file,
+                                                        folder="magacin/",
+                                                        public_id=f"{nova_sifra_izmena}_{nova_boja_izmena}",
+                                                        transformation=[
+                                                            {"width": 800, "crop": "limit"},
+                                                            {"quality": "auto", "fetch_format": "auto"}
+                                                        ]
+                                                    )
+                                                    finalna_putanja_slike = rez_nove_slike["secure_url"]
+                                                except:
+                                                    pass
+                                                
+                                        try:
+                                            conn = uzmi_vezu_sa_bazom()
+                                            cursor = conn.cursor()
+                                            # Izmenjen UPDATE upit tako da ažurira i 'sifra' kolonu
+                                            cursor.execute('''
+                                                UPDATE artikli 
+                                                SET sifra = %s, boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
+                                                WHERE sifra = %s AND boja = %s AND sezona = %s
+                                            ''', (nova_sifra_izmena, nova_boja_izmena, nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, sif, boj, izabrana_sezona))
+                                            conn.commit()
+                                            conn.close()
                                             
-                                    try:
-                                        conn = uzmi_vezu_sa_bazom()
-                                        cursor = conn.cursor()
-                                        cursor.execute('''
-                                            UPDATE artikli 
-                                            SET boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
-                                            WHERE sifra = %s AND boja = %s AND sezona = %s
-                                        ''', (nova_boja_izmena, nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, sif, boj, izabrana_sezona))
-                                        conn.commit()
-                                        conn.close()
+                                            ucitaj_artikle_za_sezonu.clear()
+                                            st.success("Izmenjeno!")
+                                            st.rerun()
+                                        except psycopg2.IntegrityError:
+                                            st.error(f"Greška: Šifra '{nova_sifra_izmena}' u boji '{nova_boja_izmena}' već postoji u ovoj sekciji!")
                                         
-                                        ucitaj_artikle_za_sezonu.clear()
-                                        st.success("Izmenjeno!")
-                                        st.rerun()
-                                    except psycopg2.IntegrityError:
-                                        st.error(f"Greška: Šifra '{sif}' u boji '{nova_boja_izmena}' već postoji u ovoj sekciji!")
-                                    
                             with col_b2:
                                 if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
                                     conn = uzmi_vezu_sa_bazom()
