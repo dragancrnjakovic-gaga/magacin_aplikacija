@@ -47,12 +47,6 @@ def kreiraj_tabele():
         )
     ''')
     
-    # Automatska provera i dodavanje kolone grad u tabelu izlaz_robe ukoliko ne postoji od ranije
-    try:
-        cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS grad TEXT")
-    except Exception:
-        pass
-    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sifrarnik_boja (
             boja TEXT PRIMARY KEY
@@ -166,6 +160,7 @@ st.markdown("""
     }
 
     /* FIKS ZA PUSH-OVANJE DUGMADI "SLEDEĆA" SKROZ UDESNO DO SAME IVICE BOKSA */
+    /* Pronalazimo kolone u kojima se nalaze dugmad sa ključem vrh_next i dole_veliko_next i poništavamo desni padding */
     div[data-testid="stColumn"]:has(button[key="vrh_next"]),
     div[data-testid="stColumn"]:has(button[key="dole_veliko_next"]) {
         display: flex !important;
@@ -178,6 +173,7 @@ st.markdown("""
         width: auto !important;
     }
 
+    /* Osiguravamo da dugme unutar te kolone ne zauzima 100% već se prilagođava tekstu i poravnava desno */
     button[key="vrh_next"], button[key="dole_veliko_next"] {
         width: max-content !important;
         margin-left: auto !important;
@@ -214,6 +210,7 @@ if "prethodna_sezona" not in st.session_state:
 if "prethodni_meni" not in st.session_state:
     st.session_state["prethodni_meni"] = meni
 
+# Ako korisnik promeni sekciju ili meni, resetujemo na prvu stranu
 if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session_state["prethodni_meni"]:
     st.session_state["trenutna_stranica"] = 1
     st.session_state["prethodna_sezona"] = izabrana_sezona
@@ -500,6 +497,7 @@ elif meni == "Trenutno stanje":
                         with ekspander:
                             st.write("**Uredi podatke:**")
                             
+                            # --- DODATO: Polje za izmenu šifre modela ---
                             nova_sifra_izmena = st.text_input("Izmeni šifru modela:", value=sif, key=f"sifra_izm_{kljuc_id}").strip().upper()
                             
                             indeks_trenutne_boje = lista_boja.index(boj) if boj in lista_boja else 0
@@ -514,6 +512,7 @@ elif meni == "Trenutno stanje":
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
+                                    # Provera da li je uneta prazna šifra
                                     if nova_sifra_izmena == "":
                                         st.error("Šifra modela ne može biti prazna!")
                                     else:
@@ -537,6 +536,7 @@ elif meni == "Trenutno stanje":
                                         try:
                                             conn = uzmi_vezu_sa_bazom()
                                             cursor = conn.cursor()
+                                            # Izmenjen UPDATE upit tako da ažurira i 'sifra' kolonu
                                             cursor.execute('''
                                                 UPDATE artikli 
                                                 SET sifra = %s, boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
@@ -564,6 +564,7 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
             
+            # 2. KONTROLE STRANICA NA DNU
             if broj_stranica > 1 and not pretraga:
                 prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
@@ -596,11 +597,6 @@ elif meni == "Evidencija izlaza (Po danima)":
             sufiks_stanje = "komada" if izabrana_sezona == "Torbe" else "pari"
             st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{current_stanje} {sufiks_stanje}**")
             
-            # Lista gradova za selekciju
-            lista_gradova = ["Beograd", "Novi Sad", "Niš", "Kragujevac", "Subotica", "Čačak", "Kraljevo", "Mladenovac", "Šabac", "Novi Pazar"]
-            dinamicki_kljuc_grad = f"izlaz_grad_input_{st.session_state['reset_brojac']}"
-            izabrani_grad = st.selectbox("Izaberi grad isporuke:", lista_gradova, key=dinamicki_kljuc_grad)
-            
             dinamicki_kljuc = f"izlaz_pari_input_{st.session_state['reset_brojac']}"
             labela_izlaz_unos = "Letimičan unos količine za izlaz (kom):" if izabrana_sezona == "Torbe" else "Letimičan unos količine za izlaz:"
             kolicina_izlaza = st.number_input(
@@ -621,9 +617,9 @@ elif meni == "Evidencija izlaza (Po danima)":
                         cursor = conn.cursor()
                         
                         cursor.execute('''
-                            INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz, grad)
-                            VALUES (%s, %s, %s, %s, %s)
-                        ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza, izabrani_grad))
+                            INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
+                            VALUES (%s, %s, %s, %s)
+                        ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
                         
                         novo_stanje = current_stanje - kolicina_izlaza
                         cursor.execute('''
@@ -636,7 +632,7 @@ elif meni == "Evidencija izlaza (Po danima)":
                         ucitaj_artikle_za_sezonu.clear()
                         
                         st.session_state["reset_brojac"] += 1
-                        st.success(f"Uspešno proknjižen izlaz! Roba poslata za {izabrani_grad}. Novo stanje je {novo_stanje} {sufiks_stanje}.")
+                        st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} {sufiks_stanje}.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Sistemska greška pri upisu: {e}")
@@ -650,12 +646,11 @@ elif meni == "Evidencija izlaza (Po danima)":
                 ir.datum AS "Datum", 
                 ir.sifra_artikla AS "Šifra modela", 
                 ir.boja_artikla AS "Boja", 
-                ir.kolicina_izlaz AS "Izašlo",
-                COALESCE(ir.grad, 'Nije uneto') AS "Grad"
+                ir.kolicina_izlaz AS "Izašlo" 
             FROM izlaz_robe ir
             INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
             WHERE a.sezona = %s
-            ORDER BY ir.id DESC
+            ORDER BY ir.id ASC
         '''
         df_izlazi = pd.read_sql_query(upit_istorija, conn, params=(izabrana_sezona,))
         conn.close()
@@ -683,4 +678,4 @@ elif meni == "Evidencija izlaza (Po danima)":
             )
             st.dataframe(df_izlazi, use_container_width=True)
         else:
-            st.info("Nema zabeleženih izlaza za ovu sekciju.")
+            st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
