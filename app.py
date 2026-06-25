@@ -266,7 +266,6 @@ if meni == "Unos nove robe":
     if "unos_sifra" not in st.session_state: st.session_state["unos_sifra"] = ""
     if "unos_boja" not in st.session_state: st.session_state["unos_boja"] = lista_boja[0] if lista_boja else ""
     
-    # Dinamički ključevi za automatsko pražnjenje numeričkih polja nakon unosa
     kljuc_unos_pari = f"unos_kol_{st.session_state['reset_brojac']}"
     kljuc_unos_kutija = f"unos_kut_{st.session_state['reset_brojac']}"
     kljuc_unos_prodajna = f"unos_pc_{st.session_state['reset_brojac']}"
@@ -280,7 +279,6 @@ if meni == "Unos nove robe":
         labela_kol = "Količina (komada/pari):" if izabrana_sezona == "Torbe" else "Količina pari:"
         labela_kut = "Broj komada u jednoj kutiji/pakovanju:" if izabrana_sezona == "Torbe" else "Broj pari u jednoj kutiji:"
         
-        # Sva polja su podešena na value=None (prazna) i vezana za reset_brojac
         broj_pari = st.number_input(labela_kol, min_value=0, step=1, value=None, key=kljuc_unos_pari)
         pari_u_kutiji = st.number_input(labela_kut, min_value=1, step=1, value=None, key=kljuc_unos_kutija)
     with col2:
@@ -319,7 +317,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = rezultat_slike["secure_url"]
+                    url_slike = resultado_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -339,7 +337,6 @@ if meni == "Unos nove robe":
             
             ucitaj_artikle_za_sezonu.clear()
             
-            # Resetujemo šifru i uvećavamo brojač koji prazni sva ostala polja
             st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
             
@@ -369,7 +366,7 @@ if meni == "Unos nove robe":
                 except psycopg2.IntegrityError:
                     st.warning("Boja već postoji u listi.")
 
-# --- TRENUTNO STANJE I EVIDENCIJA IZLAZA OSTAJU ISTI KAO U PRETHODNOM KODU ---
+# --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
@@ -524,6 +521,7 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1 and not pretraga:
                 prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
+# --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -598,10 +596,12 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.markdown("---")
         st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
         conn = uzmi_vezu_sa_bazom()
+        
+        # SQL Upit sa korigovanim nazivima kolona prema tvom zahtevu
         upit_istorija = '''
             SELECT ir.datum AS "Datum", ir.sifra_artikla AS "Šifra modela", ir.boja_artikla AS "Boja", ir.grad AS "Grad", ir.kolicina_izlaz AS "Izašlo",
-                   ir.prodajna_cena AS "Cena po paru", (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
-                   ir.nabavna_cena AS "Nabavna po paru", (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
+                   ir.prodajna_cena AS "Prodajna cena po paru", (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
+                   ir.nabavna_cena AS "Nabavna cena po paru", (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
             FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
             WHERE a.sezona = %s ORDER BY ir.id DESC
         '''
