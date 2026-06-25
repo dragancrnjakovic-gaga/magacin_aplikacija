@@ -317,7 +317,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = resultado_slike["secure_url"]
+                    url_slike = rezultat_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -521,7 +521,7 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1 and not pretraga:
                 prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (SA DINAMIČKIM FILTRIRANJEM TABELE) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -597,7 +597,6 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
         conn = uzmi_vezu_sa_bazom()
         
-        # SQL Upit sa korigovanim nazivima kolona prema tvom zahtevu
         upit_istorija = '''
             SELECT ir.datum AS "Datum", ir.sifra_artikla AS "Šifra modela", ir.boja_artikla AS "Boja", ir.grad AS "Grad", ir.kolicina_izlaz AS "Izašlo",
                    ir.prodajna_cena AS "Prodajna cena po paru", (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
@@ -609,22 +608,30 @@ elif meni == "Evidencija izlaza (Po danima)":
         conn.close()
         
         if not df_izlazi.empty:
+            # Selektori za filtriranje
             col_filter1, col_filter2, col_filter3 = st.columns(3)
             with col_filter1: od_datuma = st.date_input("Od datuma:", datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d") if not df_izlazi.empty else datetime.now())
             with col_filter2: do_datuma = st.date_input("Do datuma:", datetime.now())
-            with col_filter3: izabrani_grad_filter = st.selectbox("Izaberi grad za Excel:", ["SVI GRADOVI"] + lista_gradova)
+            with col_filter3: izabrani_grad_filter = st.selectbox("Izaberi grad za tabelu i Excel:", ["SVI GRADOVI"] + lista_gradova)
             
+            # Primena filtera na podatke
             od_str, do_str = od_datuma.strftime("%Y-%m-%d"), do_datuma.strftime("%Y-%m-%d")
             df_filtrirano = df_izlazi[(df_izlazi['Datum'] >= od_str) & (df_izlazi['Datum'] <= do_str)]
             if izabrani_grad_filter != "SVI GRADOVI":
                 df_filtrirano = df_filtrirano[df_filtrirano['Grad'] == izabrani_grad_filter]
             
+            # Dugme za preuzimanje filtriranih podataka
             excel_izlazi = konvertuj_u_excel(df_filtrirano)
             st.download_button(
                 label=f"🟢 Preuzmi Excel ({od_datuma.strftime('%d.%m.%Y.')} - {do_datuma.strftime('%d.%m.%Y.')}) - {izabrani_grad_filter}",
                 data=excel_izlazi, file_name=f"izlazi_{izabrana_sezona}_{izabrani_grad_filter.replace(' ', '_')}_{od_str}_do_{do_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            st.dataframe(df_izlazi, use_container_width=True)
+            
+            # Tabela sada prikazuje isključivo filtrirane podatke
+            if not df_filtrirano.empty:
+                st.dataframe(df_filtrirano, use_container_width=True)
+            else:
+                st.info("Nema zabeleženih izlaza za izabrani period i grad.")
         else:
             st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
