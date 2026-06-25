@@ -47,6 +47,16 @@ def kreiraj_tabele():
         )
     ''')
     
+    # KOD ZA NADOGRADNJU TABELE IZLAZ_ROBE (MIGRACOJA)
+    # Automatski dodajemo nove kolone ako ne postoje u bazi od ranije
+    try:
+        cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS grad TEXT;")
+        cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS prodajna_cena REAL;")
+        cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS nabavna_cena REAL;")
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS sifrarnik_boja (
             boja TEXT PRIMARY KEY
@@ -116,11 +126,11 @@ st.markdown("""
     
     /* Kartice artikala */
     div[data-testid="stHorizontalBlock"] { 
-        background: #1e2229; 
+        background: #1e2229;
         padding: 15px; 
         border-radius: 6px; 
         margin-bottom: 10px; 
-        border: 1px solid #2d3139; 
+        border: 1px solid #2d3139;
     }
     
     /* Kompaktna dugmad */
@@ -160,7 +170,6 @@ st.markdown("""
     }
 
     /* FIKS ZA PUSH-OVANJE DUGMADI "SLEDEĆA" SKROZ UDESNO DO SAME IVICE BOKSA */
-    /* Pronalazimo kolone u kojima se nalaze dugmad sa ključem vrh_next i dole_veliko_next i poništavamo desni padding */
     div[data-testid="stColumn"]:has(button[key="vrh_next"]),
     div[data-testid="stColumn"]:has(button[key="dole_veliko_next"]) {
         display: flex !important;
@@ -173,7 +182,6 @@ st.markdown("""
         width: auto !important;
     }
 
-    /* Osiguravamo da dugme unutar te kolone ne zauzima 100% već se prilagođava tekstu i poravnava desno */
     button[key="vrh_next"], button[key="dole_veliko_next"] {
         width: max-content !important;
         margin-left: auto !important;
@@ -497,9 +505,7 @@ elif meni == "Trenutno stanje":
                         with ekspander:
                             st.write("**Uredi podatke:**")
                             
-                            # --- DODATO: Polje za izmenu šifre modela ---
                             nova_sifra_izmena = st.text_input("Izmeni šifru modela:", value=sif, key=f"sifra_izm_{kljuc_id}").strip().upper()
-                            
                             indeks_trenutne_boje = lista_boja.index(boj) if boj in lista_boja else 0
                             nova_boja_izmena = st.selectbox("Izmeni boju artikla:", lista_boja, index=indeks_trenutne_boje, key=f"boja_{kljuc_id}")
                             
@@ -512,7 +518,6 @@ elif meni == "Trenutno stanje":
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
                                 if st.button("💾 Snimi", key=f"Snimi_{kljuc_id}"):
-                                    # Provera da li je uneta prazna šifra
                                     if nova_sifra_izmena == "":
                                         st.error("Šifra modela ne može biti prazna!")
                                     else:
@@ -536,7 +541,6 @@ elif meni == "Trenutno stanje":
                                         try:
                                             conn = uzmi_vezu_sa_bazom()
                                             cursor = conn.cursor()
-                                            # Izmenjen UPDATE upit tako da ažurira i 'sifra' kolonu
                                             cursor.execute('''
                                                 UPDATE artikli 
                                                 SET sifra = %s, boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
@@ -578,6 +582,18 @@ elif meni == "Evidencija izlaza (Po danima)":
     if not sve_sifre:
         st.info(f"Nema unete robe u sekciji {izabrana_sezona} da biste zabeležili izlaz.")
     else:
+        # Gradovi za izbor
+        lista_gradova = [
+            "Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", 
+            "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", 
+            "Pančevo", "Vršac", "Bečej", "Prokuplje"
+        ]
+        
+        # Dinamički ključevi zasnovani na 'reset_brojac' za čišćenje polja nakon unosa
+        kljuc_izlaz_pari = f"izlaz_pari_un_{st.session_state['reset_brojac']}"
+        kljuc_prodajna_cena = f"izlaz_pc_un_{st.session_state['reset_brojac']}"
+        kljuc_nabavna_cena = f"izlaz_nc_un_{st.session_state['reset_brojac']}"
+        
         col1, col2 = st.columns(2)
         with col1:
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now(), key="datum_izlaza_main")
@@ -585,6 +601,8 @@ elif meni == "Evidencija izlaza (Po danima)":
             
             dostupne_boje = sorted(df_artikli[df_artikli["sifra"] == izabrana_sifra]["boja"].tolist())
             izabrana_boja = st.selectbox("Izaberi boju modela:", dostupne_boje, key="izlaz_boja_select")
+            
+            izabrani_grad = st.selectbox("Izaberi grad:", lista_gradova, key="izlaz_grad_select")
         
         with col2:
             current_stanje = 0
@@ -597,16 +615,25 @@ elif meni == "Evidencija izlaza (Po danima)":
             sufiks_stanje = "komada" if izabrana_sezona == "Torbe" else "pari"
             st.info(f"💡 Trenutno stanje za **{izabrana_sifra}** (**{izabrana_boja}**) je: **{current_stanje} {sufiks_stanje}**")
             
-            dinamicki_kljuc = f"izlaz_pari_input_{st.session_state['reset_brojac']}"
-            labela_izlaz_unos = "Letimičan unos količine za izlaz (kom):" if izabrana_sezona == "Torbe" else "Letimičan unos količine za izlaz:"
-            kolicina_izlaza = st.number_input(
-                labela_izlaz_unos, 
-                min_value=1, max_value=max(1, current_stanje), 
-                step=1, value=None, key=dinamicki_kljuc
-            )
+            # Polja za unos (Podrazumevano PRAZNA -> None)
+            labela_izlaz_unos = "Količina za izlaz (broj pari):" if izabrana_sezona != "Torbe" else "Količina za izlaz (broj komada):"
+            kolicina_izlaza = st.number_input(labela_izlaz_unos, min_value=1, max_value=max(1, current_stanje), step=1, value=None, key=kljuc_izlaz_pari)
+            
+            prodajna_cena_par = st.number_input("Prodajna cena po paru (RSD):", min_value=0.0, step=50.0, value=None, key=kljuc_prodajna_cena)
+            nabavna_cena_par = st.number_input("Nabavna cena po paru (Opciono - RSD):", min_value=0.0, step=50.0, value=None, key=kljuc_nabavna_cena)
+            
+            # Automatsko računanje zbira na ekranu u realnom vremenu
+            zbir_prodajna = (kolicina_izlaza * prodajna_cena_par) if (kolicina_izlaza and prodajna_cena_par) else 0.0
+            zbir_nabavna = (kolicina_izlaza * nabavna_cena_par) if (kolicina_izlaza and nabavna_cena_par) else 0.0
+            
+            c_zbir1, c_zbir2 = st.columns(2)
+            c_zbir1.metric("Zbir prodajna (RSD)", f"{zbir_prodajna:,.2f}")
+            c_zbir2.metric("Zbir nabavna (RSD)", f"{zbir_nabavna:,.2f}")
+
+        # Dugme je aktivno TEK KADA se unese Prodajna cena po paru (RSD) i količina
+        dugme_onemoguceno = (prodajna_cena_par is None) or (kolicina_izlaza is None) or (kolicina_izlaza <= 0)
         
-        dugme_onemoguceno = kolicina_izlaza is None or kolicina_izlaza <= 0
-        
+        st.write("")
         if st.button("Zapiši izlaz robe", type="primary", key="dugme_zapisi_izlaz", disabled=dugme_onemoguceno):
             if kolicina_izlaza is None or current_stanje < kolicina_izlaza or current_stanje == 0:
                 st.error("Greška: Nemate dovoljno količine na stanju!")
@@ -616,10 +643,11 @@ elif meni == "Evidencija izlaza (Po danima)":
                         conn = uzmi_vezu_sa_bazom()
                         cursor = conn.cursor()
                         
+                        # Upis sa novim poljima u bazu (grad, prodajna_cena, nabavna_cena)
                         cursor.execute('''
-                            INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz)
-                            VALUES (%s, %s, %s, %s)
-                        ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza))
+                            INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz, grad, prodajna_cena, nabavna_cena)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza, izabrani_grad, prodajna_cena_par, nabavna_cena_par))
                         
                         novo_stanje = current_stanje - kolicina_izlaza
                         cursor.execute('''
@@ -631,8 +659,9 @@ elif meni == "Evidencija izlaza (Po danima)":
                         
                         ucitaj_artikle_za_sezonu.clear()
                         
+                        # Povećavanje reset brojača prazni polja koja su vezana za njega!
                         st.session_state["reset_brojac"] += 1
-                        st.success(f"Uspešno proknjižen izlaz! Novo stanje je {novo_stanje} {sufiks_stanje}.")
+                        st.success(f"Uspešno proknjižen izlaz za {izabrani_grad}! Novo stanje je {novo_stanje} {sufiks_stanje}.")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Sistemska greška pri upisu: {e}")
@@ -640,42 +669,60 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.markdown("---")
         st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
         
+        # Učitavanje istorije izlaza
         conn = uzmi_vezu_sa_bazom()
         upit_istorija = '''
             SELECT 
                 ir.datum AS "Datum", 
                 ir.sifra_artikla AS "Šifra modela", 
                 ir.boja_artikla AS "Boja", 
-                ir.kolicina_izlaz AS "Izašlo" 
+                ir.grad AS "Grad",
+                ir.kolicina_izlaz AS "Izašlo",
+                ir.prodajna_cena AS "Cena po paru",
+                (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
+                ir.nabavna_cena AS "Nabavna po paru",
+                (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
             FROM izlaz_robe ir
             INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
             WHERE a.sezona = %s
-            ORDER BY ir.id ASC
+            ORDER BY ir.id DESC
         '''
         df_izlazi = pd.read_sql_query(upit_istorija, conn, params=(izabrana_sezona,))
         conn.close()
         
         if not df_izlazi.empty:
-            st.write(f"📅 **Izaberi period za preuzimanje Excel tabele ({izabrana_sezona}):**")
-            col_d1, col_d2 = st.columns(2)
-            with col_d1:
+            st.write(f"📅 **Filteri za preuzimanje namenske Excel tabele ({izabrana_sezona}):**")
+            col_filter1, col_filter2, col_filter3 = st.columns(3)
+            
+            with col_filter1:
                 od_datuma = st.date_input("Od datuma:", datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d") if not df_izlazi.empty else datetime.now())
-            with col_d2:
+            with col_filter2:
                 do_datuma = st.date_input("Do datuma:", datetime.now())
+            with col_filter3:
+                sve_opcije_gradova = ["SVI GRADOVI"] + lista_gradova
+                izabrani_grad_filter = st.selectbox("Izaberi grad za Excel:", sve_opcije_gradova)
             
             od_str = od_datuma.strftime("%Y-%m-%d")
             do_str = do_datuma.strftime("%Y-%m-%d")
             
+            # Filtriranje za EXCEL na osnovu datuma i grada
             df_filtrirano = df_izlazi[(df_izlazi['Datum'] >= od_str) & (df_izlazi['Datum'] <= do_str)]
             
+            if izabrani_grad_filter != "SVI GRADOVI":
+                df_filtrirano = df_filtrirano[df_filtrirano['Grad'] == izabrani_grad_filter]
+            
             excel_izlazi = konvertuj_u_excel(df_filtrirano)
+            
+            tekst_dugmeta = f"🟢 Preuzmi Excel ({od_datuma.strftime('%d.%m.%Y.')} - {do_datuma.strftime('%d.%m.%Y.')}) - {izabrani_grad_filter}"
             st.download_button(
-                label=f"🟢 Preuzmi Excel za period ({od_datuma.strftime('%d.%m.%Y.')} - {do_datuma.strftime('%d.%m.%Y.')})",
+                label=tekst_dugmeta,
                 data=excel_izlazi,
-                file_name=f"izlazi_{izabrana_sezona}_{od_str}_do_{do_str}.xlsx",
+                file_name=f"izlazi_{izabrana_sezona}_{izabrani_grad_filter.replace(' ', '_')}_{od_str}_do_{do_str}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 key="dugme_download_excel_izlazi"
             )
+            
+            # Prikaz kompletne tabele (sortirano po id DESC / vremenu upisa)
             st.dataframe(df_izlazi, use_container_width=True)
         else:
             st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
