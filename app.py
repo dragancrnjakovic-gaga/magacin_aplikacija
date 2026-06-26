@@ -496,7 +496,7 @@ elif meni == "Trenutno stanje":
                                             conn = uzmi_vezu_sa_bazom()
                                             cursor = conn.cursor()
                                             
-                                            # KOD ZA MASOVNU IZMENU ŠIFRE (ZA SVE BOJE MODELA)
+                                            # 1. KOD ZA MASOVNU IZMENU ŠIFRE (ZA SVE BOJE MODELA)
                                             if nova_sifra_izmena != sif:
                                                 cursor.execute('''
                                                     UPDATE artikli 
@@ -510,16 +510,23 @@ elif meni == "Trenutno stanje":
                                                     WHERE sifra_artikla = %s
                                                 ''', (nova_sifra_izmena, sif))
                                             
-                                            # Ažuriranje preostalih specifičnih detalja za izabranu varijaciju (boju)
+                                            # 2. KOD ZA MASOVNU IZMENU CENA (PRODAJNE I INTERNET) ZA SVE BOJE TOG MODELA
                                             cursor.execute('''
-                                                UPDATE artikli SET boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
+                                                UPDATE artikli
+                                                SET prodajna_cena = %s, internet_cena = %s
+                                                WHERE sifra = %s AND sezona = %s
+                                            ''', (nova_p_cena, nova_i_cena, nova_sifra_izmena, izabrana_sezona))
+                                            
+                                            # 3. Ažuriranje preostalih specifičnih detalja koji važe SAMO ZA TU VARIJACIJU (boju)
+                                            cursor.execute('''
+                                                UPDATE artikli SET boja = %s, broj_pari = %s, slika_putanja = %s
                                                 WHERE sifra = %s AND boja = %s AND sezona = %s
-                                            ''', (nova_boja_izmena, nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
+                                            ''', (nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
                                             
                                             conn.commit()
                                             conn.close()
                                             ucitaj_artikle_za_sezonu.clear()
-                                            st.success("Izmene uspešno sačuvane!")
+                                            st.success("Izmene uspešno sačuvane za sve varijacije modela!")
                                             st.rerun()
                                         except psycopg2.IntegrityError:
                                             st.error(f"Greška: Šifra '{nova_sifra_izmena}' u boji '{nova_boja_izmena}' već postoji u ovoj sekciji!")
