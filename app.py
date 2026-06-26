@@ -495,14 +495,31 @@ elif meni == "Trenutno stanje":
                                         try:
                                             conn = uzmi_vezu_sa_bazom()
                                             cursor = conn.cursor()
+                                            
+                                            # KOD ZA MASOVNU IZMENU ŠIFRE (ZA SVE BOJE MODELA)
+                                            if nova_sifra_izmena != sif:
+                                                cursor.execute('''
+                                                    UPDATE artikli 
+                                                    SET sifra = %s
+                                                    WHERE sifra = %s AND sezona = %s
+                                                ''', (nova_sifra_izmena, sif, izabrana_sezona))
+                                                
+                                                cursor.execute('''
+                                                    UPDATE izlaz_robe
+                                                    SET sifra_artikla = %s
+                                                    WHERE sifra_artikla = %s
+                                                ''', (nova_sifra_izmena, sif))
+                                            
+                                            # Ažuriranje preostalih specifičnih detalja za izabranu varijaciju (boju)
                                             cursor.execute('''
-                                                UPDATE artikli SET sifra = %s, boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
+                                                UPDATE artikli SET boja = %s, broj_pari = %s, prodajna_cena = %s, internet_cena = %s, slika_putanja = %s
                                                 WHERE sifra = %s AND boja = %s AND sezona = %s
-                                            ''', (nova_sifra_izmena, nova_boja_izmena, nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, sif, boj, izabrana_sezona))
+                                            ''', (nova_boja_izmena, nova_kol, nova_p_cena, nova_i_cena, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
+                                            
                                             conn.commit()
                                             conn.close()
                                             ucitaj_artikle_za_sezonu.clear()
-                                            st.success("Izmenjeno!")
+                                            st.success("Izmene uspešno sačuvane!")
                                             st.rerun()
                                         except psycopg2.IntegrityError:
                                             st.error(f"Greška: Šifra '{nova_sifra_izmena}' u boji '{nova_boja_izmena}' već postoji u ovoj sekciji!")
@@ -608,19 +625,16 @@ elif meni == "Evidencija izlaza (Po danima)":
         conn.close()
         
         if not df_izlazi.empty:
-            # Selektori za filtriranje
             col_filter1, col_filter2, col_filter3 = st.columns(3)
             with col_filter1: od_datuma = st.date_input("Od datuma:", datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d") if not df_izlazi.empty else datetime.now())
             with col_filter2: do_datuma = st.date_input("Do datuma:", datetime.now())
             with col_filter3: izabrani_grad_filter = st.selectbox("Izaberi grad za tabelu i Excel:", ["SVI GRADOVI"] + lista_gradova)
             
-            # Primena filtera na podatke
             od_str, do_str = od_datuma.strftime("%Y-%m-%d"), do_datuma.strftime("%Y-%m-%d")
             df_filtrirano = df_izlazi[(df_izlazi['Datum'] >= od_str) & (df_izlazi['Datum'] <= do_str)]
             if izabrani_grad_filter != "SVI GRADOVI":
                 df_filtrirano = df_filtrirano[df_filtrirano['Grad'] == izabrani_grad_filter]
             
-            # Dugme za preuzimanje filtriranih podataka
             excel_izlazi = konvertuj_u_excel(df_filtrirano)
             st.download_button(
                 label=f"🟢 Preuzmi Excel ({od_datuma.strftime('%d.%m.%Y.')} - {do_datuma.strftime('%d.%m.%Y.')}) - {izabrani_grad_filter}",
@@ -628,7 +642,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
-            # Tabela sada prikazuje isključivo filtrirane podatke
             if not df_filtrirano.empty:
                 st.dataframe(df_filtrirano, use_container_width=True)
             else:
