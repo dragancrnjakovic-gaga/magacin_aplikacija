@@ -108,6 +108,7 @@ def pronadji_sliku_u_df(df, sifra):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
+# HIBRIDNI DIZAJN PRILAGOĐEN SVETLOJ I TAMNOJ TEMI (KORIŠĆENJEM STREAMLIT VARIJABLI)
 st.markdown("""
     <style>
     .block-container {
@@ -123,14 +124,16 @@ st.markdown("""
     .stAlert p { font-size: 0.85rem !important; }
     .stExpander p { font-size: 0.8rem !important; }
     
+    /* Dinamičke kartice koje prate sekundarnu pozadinu aktivne teme */
     div[data-testid="stHorizontalBlock"] { 
-        background: #1e2229;
+        background: var(--secondary-background-color);
         padding: 15px; 
-        border-radius: 6px; 
-        margin-bottom: 10px; 
-        border: 1px solid #2d3139;
+        border-radius: 8px; 
+        margin-bottom: 12px; 
+        border: 1px solid var(--border-color);
     }
     
+    /* Kompaktna dugmad */
     div.stButton > button {
         width: 100% !important;
         padding: 2px 10px !important;
@@ -142,16 +145,20 @@ st.markdown("""
         display: none !important;
     }
     
+    /* Indikator trenutne stranice - prilagođen obema temama */
     .indikator-stranice {
-        background-color: #2e3440;
+        background-color: var(--secondary-background-color);
         padding: 6px 12px;
         border-radius: 4px;
         font-weight: bold;
-        color: #88c0d0;
+        color: #26a69a;
         font-size: 0.95rem;
-        border-left: 4px solid #88c0d0;
+        border-left: 4px solid #26a69a;
         margin-bottom: 15px;
         display: inline-block;
+        border-top: 1px solid var(--border-color);
+        border-right: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--border-color);
     }
 
     [data-testid="stHorizontalBlock"]:has(button[key^="vrh_"]),
@@ -317,7 +324,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = rezultat_slike["secure_url"]
+                    url_slike = resultado_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -336,7 +343,6 @@ if meni == "Unos nove robe":
             conn.close()
             
             ucitaj_artikle_za_sezonu.clear()
-            
             st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
             
@@ -365,6 +371,7 @@ if meni == "Unos nove robe":
                     st.rerun()
                 except psycopg2.IntegrityError:
                     st.warning("Boja već postoji u listi.")
+
 
 # --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
@@ -496,7 +503,6 @@ elif meni == "Trenutno stanje":
                                             conn = uzmi_vezu_sa_bazom()
                                             cursor = conn.cursor()
                                             
-                                            # 1. KOD ZA MASOVNU IZMENU ŠIFRE (ZA SVE BOJE MODELA)
                                             if nova_sifra_izmena != sif:
                                                 cursor.execute('''
                                                     UPDATE artikli 
@@ -510,14 +516,12 @@ elif meni == "Trenutno stanje":
                                                     WHERE sifra_artikla = %s
                                                 ''', (nova_sifra_izmena, sif))
                                             
-                                            # 2. KOD ZA MASOVNU IZMENU CENA (PRODAJNE I INTERNET) ZA SVE BOJE TOG MODELA
                                             cursor.execute('''
                                                 UPDATE artikli
                                                 SET prodajna_cena = %s, internet_cena = %s
                                                 WHERE sifra = %s AND sezona = %s
                                             ''', (nova_p_cena, nova_i_cena, nova_sifra_izmena, izabrana_sezona))
                                             
-                                            # 3. Ažuriranje preostalih specifičnih detalja koji važe SAMO ZA TU VARIJACIJU (boju)
                                             cursor.execute('''
                                                 UPDATE artikli SET boja = %s, broj_pari = %s, slika_putanja = %s
                                                 WHERE sifra = %s AND boja = %s AND sezona = %s
@@ -544,6 +548,7 @@ elif meni == "Trenutno stanje":
                 st.markdown("---")
             if broj_stranica > 1 and not pretraga:
                 prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
+
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA (SA DINAMIČKIM FILTRIRANJEM TABELE) ---
 elif meni == "Evidencija izlaza (Po danima)":
