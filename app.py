@@ -324,7 +324,7 @@ if meni == "Unos nove robe":
                             {"quality": "auto", "fetch_format": "auto"}
                         ]
                     )
-                    url_slike = resultado_slike["secure_url"]
+                    url_slike = rezultat_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
