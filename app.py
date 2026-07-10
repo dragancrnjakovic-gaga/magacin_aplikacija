@@ -90,6 +90,20 @@ def ucitaj_boje():
     conn.close()
     return boje
 
+@st.cache_data(ttl=300)
+def ucitaj_istoriju_izlaza_za_sezonu(sezona):
+    conn = uzmi_vezu_sa_bazom()
+    upit_istorija = '''
+        SELECT ir.datum AS "Datum", ir.sifra_artikla AS "Šifra modela", ir.boja_artikla AS "Boja", ir.grad AS "Grad", ir.kolicina_izlaz AS "Izašlo",
+               ir.prodajna_cena AS "Prodajna cena po paru", (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
+               ir.nabavna_cena AS "Nabavna cena po paru", (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
+        FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
+        WHERE a.sezona = %s ORDER BY ir.id DESC
+    '''
+    df = pd.read_sql_query(upit_istorija, conn, params=(sezona,))
+    conn.close()
+    return df
+
 def konvertuj_u_excel(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -550,7 +564,7 @@ elif meni == "Trenutno stanje":
                 prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (SA DINAMIČKIM FILTRIRANJEM TABELE) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (SA PAMETNIM KEŠIRANJEM ISTORIJE TAPELE) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -615,7 +629,10 @@ elif meni == "Evidencija izlaza (Po danima)":
                         conn.commit()
                         conn.close()
                         
+                        # Čistimo keš tabele stanja i keš tabele istorije izlaza kako bi povukli najnovije podatke iz baze
                         ucitaj_artikle_za_sezonu.clear()
+                        ucitaj_istoriju_izlaza_za_sezonu.clear()
+                        
                         st.session_state["reset_brojac"] += 1
                         st.success(f"Uspešno proknjižen izlaz za {izabrani_grad}!")
                         st.rerun()
@@ -624,17 +641,9 @@ elif meni == "Evidencija izlaza (Po danima)":
 
         st.markdown("---")
         st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
-        conn = uzmi_vezu_sa_bazom()
         
-        upit_istorija = '''
-            SELECT ir.datum AS "Datum", ir.sifra_artikla AS "Šifra modela", ir.boja_artikla AS "Boja", ir.grad AS "Grad", ir.kolicina_izlaz AS "Izašlo",
-                   ir.prodajna_cena AS "Prodajna cena po paru", (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
-                   ir.nabavna_cena AS "Nabavna cena po paru", (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
-            FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
-            WHERE a.sezona = %s ORDER BY ir.id DESC
-        '''
-        df_izlazi = pd.read_sql_query(upit_istorija, conn, params=(izabrana_sezona,))
-        conn.close()
+        # Umesto direktnog i teškog SQL upita, sada istoriju vučemo munjevito iz keširane funkcije
+        df_izlazi = ucitaj_istoriju_izlaza_za_sezonu(izabrana_sezona)
         
         if not df_izlazi.empty:
             col_filter1, col_filter2, col_filter3 = st.columns(3)
