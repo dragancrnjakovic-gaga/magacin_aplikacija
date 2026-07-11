@@ -21,61 +21,69 @@ def inicijalizuj_bazu():
     return psycopg2.connect(st.secrets["postgres"]["url"])
 
 def uzmi_vezu_sa_bazom():
-    conn = inicijalizuj_bazu()
-    # Ako je veza zatvorena ili pukla u pozadini, osvežavamo je bez rušenja aplikacije
-    if conn.closed != 0:
-        st.cache_resource.clear()
+    try:
         conn = inicijalizuj_bazu()
-    return conn
+        # Ako je veza zatvorena ili pukla u pozadini, osvežavamo je
+        if conn.closed != 0:
+            st.cache_resource.clear()
+            conn = inicijalizuj_bazu()
+        return conn
+    except Exception:
+        # Tiho hvatamo "SSL SYSCALL / EOF" i OperationalError greške, čistimo keš i vraćamo novu vezu
+        st.cache_resource.clear()
+        return inicijalizuj_bazu()
 
 def kreiraj_tabele():
-    conn = uzmi_vezu_sa_bazom()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS artikli (
-            sifra TEXT,
-            boja TEXT,
-            sezona TEXT DEFAULT 'Proleće-Leto',
-            broj_pari INTEGER,
-            pari_u_kutiji INTEGER,
-            prodajna_cena REAL,
-            internet_cena REAL,
-            slika_putanja TEXT,
-            PRIMARY KEY (sifra, boja)
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS izlaz_robe (
-            id SERIAL PRIMARY KEY,
-            datum TEXT,
-            sifra_artikla TEXT,
-            boja_artikla TEXT,
-            kolicina_izlaz INTEGER
-        )
-    ''')
-    
     try:
-        cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS grad TEXT;")
-        cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS prodajna_cena REAL;")
-        cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS nabavna_cena REAL;")
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sifrarnik_boja (
-            boja TEXT PRIMARY KEY
-        )
-    ''')
-    
-    cursor.execute("SELECT COUNT(*) FROM sifrarnik_boja")
-    if cursor.fetchone()[0] == 0:
-        pocetne_boje = [("Black",), ("Blue",), ("Red",), ("Gray",), ("White",), ("Beige",)]
-        cursor.executemany("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", pocetne_boje)
+        conn = uzmi_vezu_sa_bazom()
+        cursor = conn.cursor()
         
-    conn.commit()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS artikli (
+                sifra TEXT,
+                boja TEXT,
+                sezona TEXT DEFAULT 'Proleće-Leto',
+                broj_pari INTEGER,
+                pari_u_kutiji INTEGER,
+                prodajna_cena REAL,
+                internet_cena REAL,
+                slika_putanja TEXT,
+                PRIMARY KEY (sifra, boja)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS izlaz_robe (
+                id SERIAL PRIMARY KEY,
+                datum TEXT,
+                sifra_artikla TEXT,
+                boja_artikla TEXT,
+                kolicina_izlaz INTEGER
+            )
+        ''')
+        
+        try:
+            cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS grad TEXT;")
+            cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS prodajna_cena REAL;")
+            cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS nabavna_cena REAL;")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sifrarnik_boja (
+                boja TEXT PRIMARY KEY
+            )
+        ''')
+        
+        cursor.execute("SELECT COUNT(*) FROM sifrarnik_boja")
+        if cursor.fetchone()[0] == 0:
+            pocetne_boje = [("Black",), ("Blue",), ("Red",), ("Gray",), ("White",), ("Beige",)]
+            cursor.executemany("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", pocetne_boje)
+            
+        conn.commit()
+    except Exception:
+        pass
 
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
@@ -185,7 +193,6 @@ st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI KATEGORIJU / SEZONU:", ["Proleće-Leto", "Jesen-Zima", "Torbe"])
 st.sidebar.markdown("---")
 
-# Izbačena Korekcija stanja zaliha iz menija
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
@@ -371,7 +378,7 @@ elif meni == "Trenutno stanje":
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
-                if not trenutna_slika or trenutna_slika == "":
+                if not trenches_slika or trenutna_slika == "":
                     trenutna_slika = pronadji_sliku_u_df(df, sif)
                 
                 br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
