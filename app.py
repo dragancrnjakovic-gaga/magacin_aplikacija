@@ -463,7 +463,7 @@ elif meni == "Trenutno stanje":
                 st.markdown("---")
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (SELEKCIJA DIREKTNO U TABELI) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (SELEKCIJA PREKO PADAJUĆEG MENIJA) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -534,40 +534,38 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.download_button(label="🟢 Preuzmi istoriju izlaza kao Excel", data=excel_izlazi, file_name="izlazi.xlsx")
         
         if not df_filtrirano.empty:
-            st.caption("💡 **Uputstvo za storniranje:** Klikom na prazan kružić na početku bilo kog reda u tabeli ispod, birate taj zapis za brisanje.")
+            # Prikazujemo tabelu normalno (svi je vide isto)
+            st.dataframe(df_filtrirano, use_container_width=True)
             
-            # NOVO: Pretvaramo dataframe u interaktivnu tabelu koja vraća selektovani red
-            tabela_selekcija = st.dataframe(
-                df_filtrirano, 
-                use_container_width=True,
-                on_select="rerun",
-                selection_mode="single-row"
-            )
+            st.markdown("---")
+            st.write("### 🚨 Storniranje (Brisanje) zapisa iz gornje tabele")
             
-            # Proveravamo da li je korisnik kliknuo na neki red
-            indeksi_selekcije = tabela_selekcija.get("selection", {}).get("rows", [])
-            if indeksi_selekcije:
-                izabrani_indeks = indeksi_selekcije[0]
-                zapis_za_storno = df_filtrirano.iloc[izabrani_indeks]
+            # Pravimo listu opcija za selectbox: "ID: 15 - Šifra: XYZ (Boja, Količina)"
+            opcije_za_storno = []
+            mapa_zapisa = {}
+            
+            for idx, red in df_filtrirano.iterrows():
+                tekst_opcije = f"ID: {red['ID Zapisa']} | Model: {red['Šifra modela']} | Boja: {red['Boja']} | Količina: {red['Izašlo']} kom | Grad: {red['Grad']}"
+                opcije_za_storno.append(tekst_opcije)
+                mapa_zapisa[tekst_opcije] = red
                 
-                id_zapis = int(zapis_za_storno["ID Zapisa"])
-                sif_zapis = zapis_za_storno["Šifra modela"]
-                boj_zapis = zapis_za_storno["Boja"]
-                kol_zapis = int(zapis_za_storno["Izašlo"])
+            izabrana_opcija_storno = st.selectbox("Izaberi zapis koji želiš da storniraš:", ["--- Izaberi zapis ---"] + opcije_za_storno)
+            
+            if izabrana_opcija_storno != "--- Izaberi zapis ---":
+                zapis = mapa_zapisa[izabrana_opcija_storno]
+                id_zapis = int(zapis["ID Zapisa"])
+                sif_zapis = zapis["Šifra modela"]
+                boj_zapis = zapis["Boja"]
+                kol_zapis = int(zapis["Izašlo"])
                 
-                # Otvaramo crvenu zonu za brisanje direktno ispod tabele
-                st.markdown("---")
-                st.error(f"⚠️ **Izabran je zapis ID: {id_zapis}** (Model: {sif_zapis}, Boja: {boj_zapis}, Količina: {kol_zapis} kom)")
+                st.error(f"Upozorenje: Brisanjem zapisa ID {id_zapis}, količina od **{kol_zapis} kom** biće automatski vraćena na stanje modela **{sif_zapis} ({boj_zapis})**.")
                 
-                if st.button("🚨 DEFINITIVNO OBRIŠI OVAJ IZLAZ I VRATI ROBU NA STANJE", type="primary"):
+                if st.button("❌ POTVRDI BRISANJE I VRATI ROBU NA STANJE", type="primary"):
                     conn = uzmi_vezu_sa_bazom()
                     cursor = conn.cursor()
                     
-                    # Provera postojanja zapisa u bazi pre brisanja
                     cursor.execute("SELECT kolicina_izlaz FROM izlaz_robe WHERE id = %s", (id_zapis,))
-                    provera = cursor.fetchone()
-                    
-                    if provera is not None:
+                    if cursor.fetchone() is not None:
                         cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_zapis,))
                         cursor.execute('''
                             UPDATE artikli SET broj_pari = broj_pari + %s 
@@ -577,10 +575,10 @@ elif meni == "Evidencija izlaza (Po danima)":
                         conn.close()
                         
                         ucitaj_artikle_za_sezonu.clear()
-                        st.success("Uspešno obrisano i stanje ažurirano!")
+                        st.success("Zapis uspešno obrisan, a stanje u magacinu je povećano!")
                         st.rerun()
                     else:
-                        st.error("Zapis je već obrisan ili ne postoji.")
+                        st.error("Greška: Zapis ne postoji u bazi.")
                         conn.close()
         else:
             st.info("Nema zabeleženih izlaza za izabrani period i grad.")
