@@ -16,6 +16,7 @@ cloudinary.config(
 )
 
 # --- PODEŠAVANJE NEON POSTGRES BAZE ---
+# UBRZANJE 1: Konekcija je postala keširani resurs koji se ne otvara stalno iznova
 @st.cache_resource
 def uzmi_vezu_sa_bazom():
     return psycopg2.connect(st.secrets["postgres"]["url"])
@@ -68,18 +69,19 @@ def kreiraj_tabele():
         cursor.executemany("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", pocetne_boje)
         
     conn.commit()
+    # Uklonjen conn.close() odavde kako veza ne bi pukla pri startu
 
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
 # --- NAPREDNO I UBRZANO KEŠIRANJE PODATAKA ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60) # Pametno keširanje na 60 sekundi za munjevit rad kroz filtere i strane
 def ucitaj_artikle_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
     return df
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300) # Šifrarnik se ređe menja, kešira se na 5 minuta
 def ucitaj_boje():
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
@@ -87,7 +89,7 @@ def ucitaj_boje():
     boje = [red[0] for red in cursor.fetchall()]
     return boje
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=30) # Istorija je keširana na 30 sekundi radi lakšeg filtriranja gradova i datuma
 def ucitaj_istoriju_izlaza_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     upit_istorija = '''
@@ -197,10 +199,6 @@ if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
-# Inicijalizacija brojača za dinamičko pražnjenje polja količine izlaza
-if "reset_izlaz_kolicina" not in st.session_state:
-    st.session_state["reset_izlaz_kolicina"] = 0
-
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
 if meni == "Unos nove robe":
@@ -267,7 +265,8 @@ if meni == "Unos nove robe":
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike))
             conn.commit()
-           
+            
+            # Resetujemo keš memoriju za artikle kako bi odmah prikazali novu stavku
             ucitaj_artikle_za_sezonu.clear()
             st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
@@ -489,10 +488,7 @@ elif meni == "Evidencija izlaza (Po danima)":
             zaliha_komada = int(filtriran_artikal.iloc[0]["broj_pari"])
             
         with col2:
-            # Uveden dinamički ključ koji se uvećava nakon uspješnog unosa kako bi polje ostalo prazno (value=None)
-            kljuc_kolicina_izlaza = f"kolicina_izlaz_{st.session_state['reset_izlaz_kolicina']}"
-            kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None, key=kljuc_kolicina_izlaza)
-            
+            kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None)
             prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=fabricka_cena)
             nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None)
             
@@ -517,10 +513,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute('UPDATE artikli SET broj_pari = broj_pari - %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kolicina_izlaza, izabrana_sifra, izabrana_boja, izabrana_sezona))
                 
                 conn.commit()
-                
-                # Uvećavamo brojač za promenu ključa unosa količine, čime ga efikasno čistimo na prazno polje
-                st.session_state["reset_izlaz_kolicina"] += 1
-                
                 ucitaj_artikle_za_sezonu.clear()
                 ucitaj_istoriju_izlaza_za_sezonu.clear()
                 st.success("✅ Izlaz uspešno proknjižen!")
