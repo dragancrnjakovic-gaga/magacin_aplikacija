@@ -172,7 +172,6 @@ st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI KATEGORIJU / SEZONU:", ["Proleće-Leto", "Jesen-Zima", "Torbe"])
 st.sidebar.markdown("---")
 
-# OVDE JE DODATA NOVA OPCIJA U MENIJU
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)", "Korekcija stanja zaliha"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
@@ -464,7 +463,7 @@ elif meni == "Trenutno stanje":
                 st.markdown("---")
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (SELEKCIJA DIREKTNO U TABELI) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -535,14 +534,61 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.download_button(label="🟢 Preuzmi istoriju izlaza kao Excel", data=excel_izlazi, file_name="izlazi.xlsx")
         
         if not df_filtrirano.empty:
-            st.dataframe(df_filtrirano, use_container_width=True)
+            st.caption("💡 **Uputstvo za storniranje:** Klikom na prazan kružić na početku bilo kog reda u tabeli ispod, birate taj zapis za brisanje.")
+            
+            # NOVO: Pretvaramo dataframe u interaktivnu tabelu koja vraća selektovani red
+            tabela_selekcija = st.dataframe(
+                df_filtrirano, 
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+            
+            # Proveravamo da li je korisnik kliknuo na neki red
+            indeksi_selekcije = tabela_selekcija.get("selection", {}).get("rows", [])
+            if indeksi_selekcije:
+                izabrani_indeks = indeksi_selekcije[0]
+                zapis_za_storno = df_filtrirano.iloc[izabrani_indeks]
+                
+                id_zapis = int(zapis_za_storno["ID Zapisa"])
+                sif_zapis = zapis_za_storno["Šifra modela"]
+                boj_zapis = zapis_za_storno["Boja"]
+                kol_zapis = int(zapis_za_storno["Izašlo"])
+                
+                # Otvaramo crvenu zonu za brisanje direktno ispod tabele
+                st.markdown("---")
+                st.error(f"⚠️ **Izabran je zapis ID: {id_zapis}** (Model: {sif_zapis}, Boja: {boj_zapis}, Količina: {kol_zapis} kom)")
+                
+                if st.button("🚨 DEFINITIVNO OBRIŠI OVAJ IZLAZ I VRATI ROBU NA STANJE", type="primary"):
+                    conn = uzmi_vezu_sa_bazom()
+                    cursor = conn.cursor()
+                    
+                    # Provera postojanja zapisa u bazi pre brisanja
+                    cursor.execute("SELECT kolicina_izlaz FROM izlaz_robe WHERE id = %s", (id_zapis,))
+                    provera = cursor.fetchone()
+                    
+                    if provera is not None:
+                        cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_zapis,))
+                        cursor.execute('''
+                            UPDATE artikli SET broj_pari = broj_pari + %s 
+                            WHERE sifra = %s AND boja = %s AND sezona = %s
+                        ''', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
+                        conn.commit()
+                        conn.close()
+                        
+                        ucitaj_artikle_za_sezonu.clear()
+                        st.success("Uspešno obrisano i stanje ažurirano!")
+                        st.rerun()
+                    else:
+                        st.error("Zapis je već obrisan ili ne postoji.")
+                        conn.close()
         else:
             st.info("Nema zabeleženih izlaza za izabrani period i grad.")
     else:
         st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
 
 
-# --- POTPUNO NOVA ČETVRTA OPCIJA: DIREKTNA KOREKCIJA ---
+# --- OPCIJA 4: KOREKCIJA STANJA ZALIHA ---
 elif meni == "Korekcija stanja zaliha":
     st.header(f"🔧 Direktna korekcija stanja artikala ({izabrana_sezona})")
     st.write("Ova opcija služi za brze ispravke (plus ili minus) na zalihama kada želite da zaobiđete storniranje zapisa u istoriji.")
@@ -558,7 +604,6 @@ elif meni == "Korekcija stanja zaliha":
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre_korekcija)
             izabrana_boja = st.selectbox("Izaberi boju:", lista_boja)
             
-            # Trenutni uvid na ekranu
             trenutni_red = df_artikli[(df_artikli["sifra"] == izabrana_sifra) & (df_artikli["boja"] == izabrana_boja)]
             if not trenutni_red.empty:
                 st.info(f"Trenutno stanje u bazi za ovaj model je: **{int(trenutni_red.iloc[0]['broj_pari'])} kom.**")
