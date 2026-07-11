@@ -378,7 +378,7 @@ elif meni == "Trenutno stanje":
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
-                if not trenches_slika or trenutna_slika == "":
+                if not trenutna_slika or trenutna_slika == "":
                     trenutna_slika = pronadji_sliku_u_df(df, sif)
                 
                 br_kutija = row["broj_pari"] // row["pari_u_kutiji"]
