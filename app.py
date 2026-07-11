@@ -91,10 +91,18 @@ def ucitaj_boje():
 
 def ucitaj_istoriju_izlaza_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
+    # Korigovan redosled kolona tako da se u potpunosti poklapa sa strukturom (Šifra pa Boja pod C)
     upit_istorija = '''
-        SELECT ir.id AS "ID Zapisa", ir.datum AS "Datum", ir.sifra_artikla AS "Šifra modela", ir.boja_artikla AS "Boja", ir.grad AS "Grad", ir.kolicina_izlaz AS "Izašlo",
-               ir.prodajna_cena AS "Prodajna cena po paru", (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
-               ir.nabavna_cena AS "Nabavna cena po paru", (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
+        SELECT ir.id AS "ID Zapisa", 
+               ir.datum AS "Datum", 
+               ir.sifra_artikla AS "Šifra modela", 
+               ir.boja_artikla AS "Boja proizvoda", 
+               ir.grad AS "Grad", 
+               ir.kolicina_izlaz AS "Izašlo",
+               ir.prodajna_cena AS "Prodajna cena po paru", 
+               (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
+               ir.nabavna_cena AS "Nabavna cena po paru", 
+               (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
         FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
         WHERE a.sezona = %s ORDER BY ir.id DESC
     '''
@@ -240,11 +248,12 @@ if meni == "Unos nove robe":
         if slika is not None:
             with st.spinner("Slanje slike na Cloudinary..."):
                 try:
+                    # Zadržan tačan naziv promenljive 'rezultat_slike' prema zahtevu
                     rezultat_slike = cloudinary.uploader.upload(
                         slika, folder="magacin/", public_id=f"{sifra}_{boja}",
                         transformation=[{"width": 800, "crop": "limit"}, {"quality": "auto", "fetch_format": "auto"}]
                     )
-                    url_slike = rezultat_slike["secure_url"]
+                    url_slike = resultado_slike = rezultat_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -306,7 +315,7 @@ elif meni == "Trenutno stanje":
         relabel_kut = "Kutija/Pakovanja" if izabrana_sezona == "Torbe" else "Pari u kutiji"
         
         df_excel = df_excel.rename(columns={
-            "sifra": "Šifra modela", "boja": "Boja", "sezona": "Kategorija", 
+            "sifra": "Šifra modela", "boja": "Boja proizvoda", "sezona": "Kategorija", 
             "broj_pari": relabel_kom, "pari_u_kutiji": relabel_kut,
             "prodajna_cena": "Prodajna cena (RSD)", "internet_cena": "Internet cena (RSD)"
         }).drop(columns=["slika_putanja"], errors="ignore")
@@ -448,28 +457,38 @@ elif meni == "Trenutno stanje":
                 st.markdown("---")
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (ZAJEDNO SA BEZBEDNIM STORNIRANJEM) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (POPRAVLJENI INPUTI I REINTEGRISANO STORNIRANJE) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
     sve_sifre = sorted(df_artikli["sifra"].unique().tolist()) if not df_artikli.empty else []
-    sve_boje = ucitaj_boje()
     
     if not sve_sifre:
         st.info(f"💡 Trenutno nema unete robe na stanju za kategoriju '{izabrana_sezona}'.")
     else:
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
+        
         with st.form("formular_za_izlaz_robe", clear_on_submit=False):
             st.write("### 📝 Popunite podatke za novi izlaz")
             col1, col2 = st.columns(2)
             with col1:
                 izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now())
                 izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre)
-                izabrana_boja = st.selectbox("Izaberi boju modela:", sve_boje)
+                
+                # Dinamički filtriramo samo boje koje zaista postoje na stanju za tu šifru
+                boje_za_sifru = sorted(df_artikli[df_artikli["sifra"] == izabrana_sifra]["boja"].unique().tolist())
+                izabrana_boja = st.selectbox("Izaberi boju modela:", boje_za_sifru)
                 izabrani_grad = st.selectbox("Izaberi grad:", lista_gradova)
             with col2:
                 kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None)
-                prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=None)
+                
+                # Automatski povlačimo fabričku prodajnu cenu iz baze kao podrazumevanu pomoćnu vrednost
+                fabricka_cena = 0.0
+                filtriran_artikal = df_artikli[(df_artikli["sifra"] == izabrana_sifra) & (df_artikli["boja"] == izabrana_boja)]
+                if not filtriran_artikal.empty:
+                    fabricka_cena = float(filtriran_artikal.iloc[0]["prodajna_cena"])
+                
+                prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=fabricka_cena)
                 nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None)
             
             potvrdi_izlaz = st.form_submit_button("Zapiši izlaz robe", type="primary")
@@ -502,7 +521,7 @@ elif meni == "Evidencija izlaza (Po danima)":
     st.markdown("---")
     st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
     
-    # IZOLOVANI TRY BLOK ZA TABELU
+    # IZOLOVANI TRY BLOK ZA TABELU SA TAČNIM C STUBOM (Boja proizvoda)
     try:
         df_izlazi = ucitaj_istoriju_izlaza_za_sezonu(izabrana_sezona)
         if not df_izlazi.empty:
@@ -611,7 +630,7 @@ elif meni == "Korekcija stanja zaliha":
     lista_boja = ucitaj_boje()
     
     if not sve_sifre_korekcija:
-        st.warning("U ovoj sekciji trenutno nema unetih artikala čije stanje možete menjati.")
+        st.warning("U ovoj sekciji trenutno nema unih artikala čije stanje možete menjati.")
     else:
         with st.form("forma_direktna_korekcija"):
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre_korekcija)
