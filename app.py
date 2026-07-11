@@ -621,4 +621,3 @@ elif meni == "Evidencija izlaza (Po danima)":
                     st.rerun()
     except Exception as storno_err:
         st.error(f"Greška u storno modulu: {storno_err}")
-        
