@@ -73,7 +73,7 @@ def kreiraj_tabele():
 kreiraj_tabele()
 
 # --- NAPREDNO KEŠIRANJE PODATAKA ---
-@st.cache_data(ttl=300)
+# @st.cache_data(ttl=300)
 def ucitaj_artikle_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
