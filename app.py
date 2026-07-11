@@ -169,42 +169,8 @@ st.markdown("""
         border-right: 1px solid var(--border-color);
         border-bottom: 1px solid var(--border-color);
     }
-
-    [data-testid="stHorizontalBlock"]:has(button[key^="vrh_"]),
-    [data-testid="stHorizontalBlock"]:has(button[key^="dole_"]) {
-        display: flex !important;
-        flex-direction: row !important;
-        justify-content: space-between !important;
-        align-items: center !important;
-        flex-wrap: nowrap !important;
-    }
-
-    div[data-testid="stColumn"]:has(button[key="vrh_next"]),
-    div[data-testid="stColumn"]:has(button[key="dole_veliko_next"]) {
-        display: flex !important;
-        justify-content: flex-end !important;
-        padding-right: 0px !important;
-    }
-    
-    div[data-testid="stColumn"]:has(button[key="vrh_next"]) > div,
-    div[data-testid="stColumn"]:has(button[key="dole_veliko_next"]) > div {
-        width: auto !important;
-    }
-
-    button[key="vrh_next"], button[key="dole_veliko_next"] {
-        width: max-content !important;
-        margin-left: auto !important;
-    }
     </style>
 """, unsafe_allow_html=True)
-
-if "skroluj_na_vrh" in st.session_state and st.session_state["skroluj_na_vrh"]:
-    st.components.v1.html(
-        "<script>window.parent.document.querySelector('.stMain').scrollTo(0, 0);</script>",
-        height=0,
-        width=0,
-    )
-    st.session_state["skroluj_na_vrh"] = False
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
@@ -388,8 +354,6 @@ elif meni == "Trenutno stanje":
                 
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
-                prikazi_gornju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
-                st.write("")
             
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
@@ -513,25 +477,67 @@ elif meni == "Trenutno stanje":
                                     st.warning("Obrisano!")
                                     st.rerun()
                 st.markdown("---")
-            if broj_stranica > 1 and not pretraga:
-                prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (POTPUNA BRZINA + NOVA FUNKCIJA STORNIRANJA) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (STORNIRANJE IZVUČENO NA SAM VRH STRANICE) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
+    
+    # --------------------------------------------------------------------
+    # NOVA SEKCIJA ZA BRISANJE / STORNIRANJE - SADA JE NA SAMOM VRHU STRANICE
+    # --------------------------------------------------------------------
+    with st.expander("🗑️ Storniraj (obriši) pogrešan izlaz robe"):
+        st.write("Unesite ID broj zapisa iz tabele sa dna stranice koji želite da obrišete. Sistem će automatski vratiti robu na stanje.")
+        id_za_brisanje = st.number_input("Unesi ID zapisa za brisanje:", min_value=1, step=1, value=None, key="storno_id")
+        
+        if st.button("Poništi ovaj izlaz i vrati robu na stanje", type="secondary", disabled=(id_za_brisanje is None)):
+            conn = uzmi_vezu_sa_bazom()
+            cursor = conn.cursor()
+            
+            # Provera da li zapis uopšte postoji u bazi
+            cursor.execute("SELECT sifra_artikla, boja_artikla, kolicina_izlaz FROM izlaz_robe WHERE id = %s", (id_za_brisanje,))
+            zapis = cursor.fetchone()
+            
+            if zapis is None:
+                st.error(f"❌ Zapis sa ID brojem {id_za_brisanje} ne postoji u bazi!")
+                conn.close()
+            else:
+                sif_art, boj_art, kol_izlaza = zapis
+                
+                # Brisanje izlaza
+                cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_za_brisanje,))
+                
+                # Vraćanje količine nazad na stanje artikla
+                cursor.execute('''
+                    UPDATE artikli 
+                    SET broj_pari = broj_pari + %s 
+                    WHERE sifra = %s AND boja = %s AND sezona = %s
+                ''', (kol_izlaza, sif_art, boj_art, izabrana_sezona))
+                
+                conn.commit()
+                conn.close()
+                
+                # Čistimo keš da se i stanje i istorija odmah osveže na ekranu
+                ucitaj_artikle_za_sezonu.clear()
+                ucitaj_istoriju_izlaza_za_sezonu.clear()
+                
+                st.success(f"✅ Izlaz ID {id_za_brisanje} je uspešno obrisan! {kol_izlaza} kom. je vraćeno na stanje artikla {sif_art} ({boj_art}).")
+                st.rerun()
+                
+    st.markdown("---")
+
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
     sve_sifre = sorted(df_artikli["sifra"].unique().tolist()) if not df_artikli.empty else []
     sve_boje = ucitaj_boje()
     
     if not sve_sifre:
-        st.info(f"Nema unete robe u sekciji {izabrana_sezona} da biste zabeležili izlaz.")
+        st.info(f"Nema unete robe u sekciji {izabrana_sezona} da biste zabeležili novi izlaz.")
     else:
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
         
-        # OTVARAMO FORMULAR za brzi unos podataka
+        # FORMULAR ZA UNOS IZLAZA
         with st.form("formular_za_izlaz_robe", clear_on_submit=False):
-            st.write("### 📝 Popunite podatke za izlaz")
+            st.write("### 📝 Popunite podatke za novi izlaz")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -583,46 +589,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Sistemska greška pri upisu: {e}")
-
-        # --- NOVA SEKCIJA ZA BRISANJE / STORNIRANJE IZLAZA ---
-        st.write("")
-        with st.expander("🗑️ Storniraj (obriši) pogrešan izlaz robe"):
-            st.write("Unesite ID broj zapisa iz tabele ispod koji želite da stornirate. Sistem će ga obrisati i vratiti robu na stanje.")
-            id_za_brisanje = st.number_input("Unesi ID zapisa za brisanje:", min_value=1, step=1, value=None, key="storno_id")
-            
-            if st.button("Poništi ovaj izlaz i vrati robu na stanje", type="secondary", disabled=(id_za_brisanje is None)):
-                conn = uzmi_vezu_sa_bazom()
-                cursor = conn.cursor()
-                
-                # Provera da li zapis postoji u bazi
-                cursor.execute("SELECT sifra_artikla, boja_artikla, kolicina_izlaz FROM izlaz_robe WHERE id = %s", (id_za_brisanje,))
-                zapis = cursor.fetchone()
-                
-                if zapis is None:
-                    st.error(f"❌ Zapis sa ID brojem {id_za_brisanje} ne postoji u bazi!")
-                    conn.close()
-                else:
-                    sif_art, boj_art, kol_izlaza = zapis
-                    
-                    # Brisanje izlaza
-                    cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_za_brisanje,))
-                    
-                    # Vraćanje robe na stanje
-                    cursor.execute('''
-                        UPDATE artikli 
-                        SET broj_pari = broj_pari + %s 
-                        WHERE sifra = %s AND boja = %s AND sezona = %s
-                    ''', (kol_izlaza, sif_art, boj_art, izabrana_sezona))
-                    
-                    conn.commit()
-                    conn.close()
-                    
-                    # Pražnjenje keša za trenutno osvežavanje prikaza
-                    ucitaj_artikle_za_sezonu.clear()
-                    ucitaj_istoriju_izlaza_za_sezonu.clear()
-                    
-                    st.success(f"✅ Izlaz ID {id_za_brisanje} je uspešno obrisan! {kol_izlaza} kom. je vraćeno na stanje artikla {sif_art} ({boj_art}).")
-                    st.rerun()
 
         st.markdown("---")
         st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
