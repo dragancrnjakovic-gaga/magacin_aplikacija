@@ -598,54 +598,83 @@ elif meni == "Korekcija stanja zaliha":
 
 
 # ====================================================================
-# --- POTPUNO BEZUSLOVAN BLOK ZA STORNIRANJE NA SAMOM KRAJU KODA ---
+# --- ULTRA-SIGURAN BLOK ZA STORNIRANJE NA SAMOM KRAJU KODA ---
 # ====================================================================
 if meni == "Evidencija izlaza (Po danima)":
     st.markdown("---")
     st.write("### 🚨 Storniranje (Brisanje) zapisa iz baze")
     
-    # Vučemo istoriju sveže iz baze direktno na kraju koda, bez ikakvih gornjih filtera
-    df_storno_podaci = ucitaj_istoriju_izlaza_za_sezonu(izabrana_sezona)
-    
-    if df_storno_podaci.empty:
-        st.info(f"Trenutno nema zabeleženih izlaza u bazi za kategoriju '{izabrana_sezona}' koji se mogu stornirati.")
-    else:
-        opcije_za_storno = []
-        mapa_zapisa = {}
+    try:
+        # Otvaramo direktnu vezu sa bazom bez keširanja da vidimo sirove podatke
+        conn = uzmi_vezu_sa_bazom()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         
-        for idx, red in df_storno_podaci.iterrows():
-            tekst_opcije = f"ID: {red['ID Zapisa']} | Model: {red['Šifra modela']} | Boja: {red['Boja']} | Količina: {red['Izašlo']} kom | Datum: {red['Datum']} | Grad: {red['Grad']}"
-            opcije_za_storno.append(tekst_opcije)
-            mapa_zapisa[tekst_opcije] = red
-            
-        izabrana_opcija_storno = st.selectbox("Izaberi zapis koji želiš stornirati:", ["--- Izaberi zapis iz baze ---"] + opcije_za_storno, key="jedinstveni_storno_kljuc_izlaza")
+        # Koristimo LEFT JOIN umesto INNER JOIN da aplikacija ne bi pukla ako je neki artikal u međuvremenu obrisan
+        upit_storno = '''
+            SELECT ir.id, ir.datum, ir.sifra_artikla, ir.boja_artikla, ir.grad, ir.kolicina_izlaz
+            FROM izlaz_robe ir 
+            LEFT JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
+            WHERE a.sezona = %s OR a.sezona IS NULL
+            ORDER BY ir.id DESC LIMIT 100
+        '''
+        cursor.execute(upit_storno, (izabrana_sezona,))
+        sirovi_izlazi = cursor.fetchall()
+        conn.close()
         
-        if izabrana_opcija_storno != "--- Izaberi zapis iz baze ---":
-            zapis = mapa_zapisa[izabrana_opcija_storno]
-            id_zapis = int(zapis["ID Zapisa"])
-            sif_zapis = zapis["Šifra modela"]
-            boj_zapis = zapis["Boja"]
-            kol_zapis = int(zapis["Izašlo"])
+        if not sirovi_izlazi:
+            st.info(f"Baza javlja: Trenutno nema zabeleženih izlaza za kategoriju '{izabrana_sezona}'.")
+        else:
+            opcije_za_storno = []
+            mapa_zapisa = {}
             
-            st.error(f"Upozorenje: Brisanjem zapisa ID {id_zapis}, količina od **{kol_zapis} kom** biće automatski vraćena na stanje modela **{sif_zapis} ({boj_zapis})**.")
-            
-            if st.button("❌ POTVRDI BRISANJE I VRATI ROBU NA STANJE", type="primary", key="dugme_izvrsenja_storniranja"):
-                conn = uzmi_vezu_sa_bazom()
-                cursor = conn.cursor()
+            for red in sirovi_izlazi:
+                # Osiguravamo se da nijedna vrednost nije None pre nego što napravimo tekst
+                sif_m = red['sifra_artikla'] if red['sifra_artikla'] else "NEPOZNATO"
+                boj_m = red['boja_artikla'] if red['boja_artikla'] else "NEPOZNATO"
+                kol_m = red['kolicina_izlaz'] if red['kolicina_izlaz'] else 0
+                dat_m = red['datum'] if red['datum'] else "---"
+                grd_m = red['grad'] if red['grad'] else "---"
                 
-                cursor.execute("SELECT kolicina_izlaz FROM izlaz_robe WHERE id = %s", (id_zapis,))
-                if cursor.fetchone() is not None:
+                tekst_opcije = f"ID: {red['id']} | Model: {sif_m} | Boja: {boj_m} | Količina: {kol_m} kom | Datum: {dat_m} | Grad: {grd_m}"
+                opcije_za_storno.append(tekst_opcije)
+                mapa_zapisa[tekst_opcije] = red
+                
+            izabrana_opcija_storno = st.selectbox(
+                "Izaberi zapis koji želiš stornirati:", 
+                ["--- Izaberi zapis iz baze ---"] + opcije_za_storno, 
+                key="potpuno_novi_storno_kljuc_2026"
+            )
+            
+            if izabrana_opcija_storno != "--- Izaberi zapis iz baze ---":
+                zapis = mapa_zapisa[izabrana_opcija_storno]
+                id_zapis = int(zapis["id"])
+                sif_zapis = zapis["sifra_artikla"]
+                boj_zapis = zapis["boja_artikla"]
+                kol_zapis = int(zapis["kolicina_izlaz"])
+                
+                st.error(f"Upozorenje: Brisanjem zapisa ID {id_zapis}, količina od **{kol_zapis} kom** biće vraćena na stanje modela **{sif_zapis} ({boj_zapis})**.")
+                
+                if st.button("❌ POTVRDI BRISANJE I VRATI ROBU NA STANJE", type="primary", key="potvrda_brisanja_konacna"):
+                    conn = uzmi_vezu_sa_bazom()
+                    cursor = conn.cursor()
+                    
                     cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_zapis,))
-                    cursor.execute('''
-                        UPDATE artikli SET broj_pari = broj_pari + %s 
-                        WHERE sifra = %s AND boja = %s AND sezona = %s
-                    ''', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
+                    
+                    # Proveravamo da li artikal uopšte postoji pre nego što mu uvećamo stanje
+                    cursor.execute("SELECT * FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif_zapis, boj_zapis, izabrana_sezona))
+                    if cursor.fetchone() is not None:
+                        cursor.execute('''
+                            UPDATE artikli SET broj_pari = broj_pari + %s 
+                            WHERE sifra = %s AND boja = %s AND sezona = %s
+                        ''', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
+                    
                     conn.commit()
                     conn.close()
                     
                     ucitaj_artikle_za_sezonu.clear()
-                    st.success("Zapis uspešno obrisan, a stanje u magacinu je povećano!")
+                    st.success("Zapis uspešno obrisan!")
                     st.rerun()
-                else:
-                    st.error("Greška: Zapis ne postoji u bazi.")
-                    conn.close()
+                    
+    except Exception as e:
+        # Ako se desi bilo kakva greška u ovom delu koda, Streamlit će je ispisati crvenom bojom
+        st.error(f"Pukao je storno blok! Greška: {e}")
