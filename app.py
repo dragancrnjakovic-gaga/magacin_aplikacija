@@ -93,7 +93,7 @@ def ucitaj_boje():
 def ucitaj_istoriju_izlaza_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     upit_istorija = '''
-        SELECT ir.datum AS "Datum", ir.sifra_artikla AS "Šifra modela", ir.boja_artikla AS "Boja", ir.grad AS "Grad", ir.kolicina_izlaz AS "Izašlo",
+        SELECT ir.id AS "ID Zapisa", ir.datum AS "Datum", ir.sifra_artikla AS "Šifra modela", ir.boja_artikla AS "Boja", ir.grad AS "Grad", ir.kolicina_izlaz AS "Izašlo",
                ir.prodajna_cena AS "Prodajna cena po paru", (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
                ir.nabavna_cena AS "Nabavna cena po paru", (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
         FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
@@ -517,19 +517,19 @@ elif meni == "Trenutno stanje":
                 prikazi_donju_paginaciju(broj_stranica, st.session_state["trenutna_stranica"])
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (POTPUNA MUNJEVITA BRZINA KROZ st.form) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (POTPUNA BRZINA + NOVA FUNKCIJA STORNIRANJA) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
     sve_sifre = sorted(df_artikli["sifra"].unique().tolist()) if not df_artikli.empty else []
-     sve_boje = ucitaj_boje()
+    sve_boje = ucitaj_boje()
     
     if not sve_sifre:
         st.info(f"Nema unete robe u sekciji {izabrana_sezona} da biste zabeležili izlaz.")
     else:
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
         
-        # OTVARAMO FORMULAR: Sve unutar ovog bloka radi trenutno bez ikakvog seckanja i osvežavanja ekrana!
+        # OTVARAMO FORMULAR za brzi unos podataka
         with st.form("formular_za_izlaz_robe", clear_on_submit=False):
             st.write("### 📝 Popunite podatke za izlaz")
             
@@ -546,14 +546,12 @@ elif meni == "Evidencija izlaza (Po danima)":
                 prodajna_cena_par = st.number_input("Prodajna cena po paru/komadu (RSD):", min_value=0.0, step=50.0, value=None)
                 nabavna_cena_par = st.number_input("Nabavna cena po paru/komadu (Opciono - RSD):", min_value=0.0, step=50.0, value=None)
             
-            # Dugme unutar formulara koje pokreće slanje odjednom
             potvrdi_izlaz = st.form_submit_button("Zapiši izlaz robe", type="primary")
             
         if potvrdi_izlaz:
             if (prodajna_cena_par is None) or (kolicina_izlaza is None) or (kolicina_izlaza <= 0):
                 st.error("❌ Greška: Morate uneti ispravnu količinu i prodajnu cenu!")
             else:
-                # Provera stvarnog stanja u bazi tek nakon klika na dugme
                 filtriran_red = df_artikli[(df_artikli["sifra"] == izabrana_sifra) & (df_artikli["boja"] == izabrana_boja)]
                 
                 if filtriran_red.empty:
@@ -578,7 +576,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                                 conn.commit()
                                 conn.close()
                                 
-                                # Čistimo keš da se tabele odmah osveže sa novim stanjem
                                 ucitaj_artikle_za_sezonu.clear()
                                 ucitaj_istoriju_izlaza_za_sezonu.clear()
                                 
@@ -586,6 +583,46 @@ elif meni == "Evidencija izlaza (Po danima)":
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Sistemska greška pri upisu: {e}")
+
+        # --- NOVA SEKCIJA ZA BRISANJE / STORNIRANJE IZLAZA ---
+        st.write("")
+        with st.expander("🗑️ Storniraj (obriši) pogrešan izlaz robe"):
+            st.write("Unesite ID broj zapisa iz tabele ispod koji želite da stornirate. Sistem će ga obrisati i vratiti robu na stanje.")
+            id_za_brisanje = st.number_input("Unesi ID zapisa za brisanje:", min_value=1, step=1, value=None, key="storno_id")
+            
+            if st.button("Poništi ovaj izlaz i vrati robu na stanje", type="secondary", disabled=(id_za_brisanje is None)):
+                conn = uzmi_vezu_sa_bazom()
+                cursor = conn.cursor()
+                
+                # Provera da li zapis postoji u bazi
+                cursor.execute("SELECT sifra_artikla, boja_artikla, kolicina_izlaz FROM izlaz_robe WHERE id = %s", (id_za_brisanje,))
+                zapis = cursor.fetchone()
+                
+                if zapis is None:
+                    st.error(f"❌ Zapis sa ID brojem {id_za_brisanje} ne postoji u bazi!")
+                    conn.close()
+                else:
+                    sif_art, boj_art, kol_izlaza = zapis
+                    
+                    # Brisanje izlaza
+                    cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_za_brisanje,))
+                    
+                    # Vraćanje robe na stanje
+                    cursor.execute('''
+                        UPDATE artikli 
+                        SET broj_pari = broj_pari + %s 
+                        WHERE sifra = %s AND boja = %s AND sezona = %s
+                    ''', (kol_izlaza, sif_art, boj_art, izabrana_sezona))
+                    
+                    conn.commit()
+                    conn.close()
+                    
+                    # Pražnjenje keša za trenutno osvežavanje prikaza
+                    ucitaj_artikle_za_sezonu.clear()
+                    ucitaj_istoriju_izlaza_za_sezonu.clear()
+                    
+                    st.success(f"✅ Izlaz ID {id_za_brisanje} je uspešno obrisan! {kol_izlaza} kom. je vraćeno na stanje artikla {sif_art} ({boj_art}).")
+                    st.rerun()
 
         st.markdown("---")
         st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
