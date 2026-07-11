@@ -22,7 +22,7 @@ def inicijalizuj_bazu():
 
 def uzmi_vezu_sa_bazom():
     conn = inicijalizuj_bazu()
-    # Ako je veza zatvorena ili pukla u pozadini, osvežavamo je
+    # Ako je veza zatvorena ili pukla u pozadini, osvežavamo je bez rušenja aplikacije
     if conn.closed != 0:
         st.cache_resource.clear()
         conn = inicijalizuj_bazu()
@@ -121,7 +121,7 @@ def konvertuj_u_excel(df):
         df.to_excel(writer, index=False, sheet_name='Magacin')
     return output.getvalue()
 
-# --- POMOĆNA FUNKCIJA SIMULTANOG PREPOZNAVANJA SLIKA ---
+# --- POMOĆNA FUNKCIJA PREPOZNAVANJA SLIKA ---
 def pronadji_sliku_u_df(df, sifra):
     if df.empty:
         return ""
@@ -185,7 +185,8 @@ st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI KATEGORIJU / SEZONU:", ["Proleće-Leto", "Jesen-Zima", "Torbe"])
 st.sidebar.markdown("---")
 
-meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)", "Korekcija stanja zaliha"])
+# Izbačena Korekcija stanja zaliha iz menija
+meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
 if "trenutna_stranica" not in st.session_state:
@@ -205,7 +206,6 @@ if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
-# Inicijalizacija brojača za dinamičko pražnjenje polja količine izlaza
 if "reset_izlaz_kolicina" not in st.session_state:
     st.session_state["reset_izlaz_kolicina"] = 0
 
@@ -629,55 +629,3 @@ elif meni == "Evidencija izlaza (Po danima)":
                     st.rerun()
     except Exception as storno_err:
         st.error(f"Greška u storno modulu: {storno_err}")
-
-
-# --- OPCIJA 4: KOREKCIJA STANJA ZALIHA ---
-elif meni == "Korekcija stanja zaliha":
-    st.header(f"🔧 Direktna korekcija stanja artikala ({izabrana_sezona})")
-    st.write("Ova opcija služi za brze ispravke na zalihama kada želite da zaobiđete storniranje u istoriji.")
-    
-    df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
-    sve_sifre_korekcija = sorted(df_artikli["sifra"].unique().tolist()) if not df_artikli.empty else []
-    lista_boja = ucitaj_boje()
-    
-    if not sve_sifre_korekcija:
-        st.warning("U ovoj sekciji trenutno nema unetih artikala čije stanje možete menjati.")
-    else:
-        with st.form("forma_direktna_korekcija"):
-            izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre_korekcija)
-            izabrana_boja = st.selectbox("Izaberi boju:", lista_boja)
-            
-            trenutni_red = df_artikli[(df_artikli["sifra"] == izabrana_sifra) & (df_artikli["boja"] == izabrana_boja)]
-            if not trenutni_red.empty:
-                st.info(f"Trenutno stanje u bazi za ovaj model je: **{int(trenutni_red.iloc[0]['broj_pari'])} kom.**")
-            else:
-                st.caption("Ovaj model trenutno ne postoji u izabranoj boji.")
-                
-            tip_operacije = st.radio("Šta želiš da uradiš sa stanjem?", ["DODAJ (Povećaj zalihe)", "ODUZMI (Smanji zalihe)"])
-            broj_komada_korekcija = st.number_input("Unesi broj komada za korekciju:", min_value=1, step=1, value=None)
-            
-            potvrdi_korekciju = st.form_submit_button("Izvrši brzu korekciju stanja", type="primary")
-            
-        if potvrdi_korekciju:
-            if broj_komada_korekcija is None:
-                st.error("Morate uneti broj komada!")
-            elif trenutni_red.empty:
-                st.error("Ne možete korigovati stanje za model/boju koji ne postoje na stanju.")
-            else:
-                staro_stanje = int(trenutni_red.iloc[0]['broj_pari'])
-                if tip_operacije == "DODAJ (Povećaj zalihe)":
-                    novo_stanje = staro_stanje + broj_komada_korekcija
-                else:
-                    novo_stanje = staro_stanje - broj_komada_korekcija
-                    
-                if novo_stanje < 0:
-                    st.error(f"Nemoguća operacija! Smanjenjem biste otišli u minus.")
-                else:
-                    conn = uzmi_vezu_sa_bazom()
-                    cursor = conn.cursor()
-                    cursor.execute('UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
-                    conn.commit()
-                    
-                    ucitaj_artikle_za_sezonu.clear()
-                    st.success(f"✅ Izmenjeno! Staro: {staro_stanje} kom. | Novo: {novo_stanje} kom.")
-                    st.rerun()
