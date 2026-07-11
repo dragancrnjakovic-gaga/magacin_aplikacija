@@ -17,8 +17,16 @@ cloudinary.config(
 
 # --- PODEŠAVANJE NEON POSTGRES BAZE ---
 @st.cache_resource
-def uzmi_vezu_sa_bazom():
+def inicijalizuj_bazu():
     return psycopg2.connect(st.secrets["postgres"]["url"])
+
+def uzmi_vezu_sa_bazom():
+    conn = inicijalizuj_bazu()
+    # Ako je veza zatvorena ili pukla u pozadini, osvežavamo je
+    if conn.closed != 0:
+        st.cache_resource.clear()
+        conn = inicijalizuj_bazu()
+    return conn
 
 def kreiraj_tabele():
     conn = uzmi_vezu_sa_bazom()
@@ -489,7 +497,6 @@ elif meni == "Evidencija izlaza (Po danima)":
             zaliha_komada = int(filtriran_artikal.iloc[0]["broj_pari"])
             
         with col2:
-            # Uveden dinamički ključ koji se uvećava nakon uspješnog unosa kako bi polje ostalo prazno (value=None)
             kljuc_kolicina_izlaza = f"kolicina_izlaz_{st.session_state['reset_izlaz_kolicina']}"
             kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None, key=kljuc_kolicina_izlaza)
             
@@ -517,8 +524,6 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute('UPDATE artikli SET broj_pari = broj_pari - %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kolicina_izlaza, izabrana_sifra, izabrana_boja, izabrana_sezona))
                 
                 conn.commit()
-                
-                # Uvećavamo brojač za promenu ključa unosa količine, čime ga efikasno čistimo na prazno polje
                 st.session_state["reset_izlaz_kolicina"] += 1
                 
                 ucitaj_artikle_za_sezonu.clear()
