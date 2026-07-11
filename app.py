@@ -108,7 +108,7 @@ def konvertuj_u_excel(df):
         df.to_excel(writer, index=False, sheet_name='Magacin')
     return output.getvalue()
 
-# --- POMOĆNA FUNKCIJA ---
+# --- POMOĆNA FUNKCIJA SIMULTANOG PREPOZNAVANJA SLIKA ---
 def pronadji_sliku_u_df(df, sifra):
     if df.empty:
         return ""
@@ -290,7 +290,7 @@ if meni == "Unos nove robe":
                     st.warning("Boja već postoji u listi.")
 
 
-# --- OPCIJA 2: TRENUTNO STANJE (SA POTPUNIM DETALJIMA I UREĐIVANJEM ARTIKALA) ---
+# --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
@@ -341,7 +341,6 @@ elif meni == "Trenutno stanje":
             
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
-                
                 sve_stranice = list(range(1, broj_stranica + 1))
                 st.session_state["trenutna_stranica"] = st.selectbox("Idi na stranicu:", sve_stranice, index=sve_stranice.index(st.session_state["trenutna_stranica"]))
             
@@ -378,7 +377,7 @@ elif meni == "Trenutno stanje":
                         c1, c2, c3, c4 = st.columns(4)
                         m_kol_label = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari na stanju"
                         m_pak_label = "Pakovanje (kut. + kom)" if izabrana_sezona == "Torbe" else "Pakovanje"
-                        m_sufiks = "kom" if izabrana_sezona == "Torbe" else "kom"
+                        m_sufiks = "kom"
                         m_pak_sufiks = f"{br_kutija} pak. + {ost_pari} kom" if izabrana_sezona == "Torbe" else f"{br_kutija} kut. + {ost_pari} par"
                         
                         c1.metric(m_kol_label, f"{row['broj_pari']} {m_sufiks}")
@@ -422,25 +421,11 @@ elif meni == "Trenutno stanje":
                                             cursor = conn.cursor()
                                             
                                             if nova_sifra_izmena != sif:
-                                                cursor.execute('''
-                                                    UPDATE artikli SET sifra = %s
-                                                    WHERE sifra = %s AND sezona = %s
-                                                ''', (nova_sifra_izmena, sif, izabrana_sezona))
-                                                
-                                                cursor.execute('''
-                                                    UPDATE izlaz_robe SET sifra_artikla = %s
-                                                    WHERE sifra_artikla = %s
-                                                ''', (nova_sifra_izmena, sif))
+                                                cursor.execute('UPDATE artikli SET sifra = %s WHERE sifra = %s AND sezona = %s', (nova_sifra_izmena, sif, izabrana_sezona))
+                                                cursor.execute('UPDATE izlaz_robe SET sifra_artikla = %s WHERE sifra_artikla = %s', (nova_sifra_izmena, sif))
                                             
-                                            cursor.execute('''
-                                                UPDATE artikli SET prodajna_cena = %s, internet_cena = %s
-                                                WHERE sifra = %s AND sezona = %s
-                                            ''', (nova_p_cena, nova_i_cena, nova_sifra_izmena, izabrana_sezona))
-                                            
-                                            cursor.execute('''
-                                                UPDATE artikli SET boja = %s, broj_pari = %s, slika_putanja = %s
-                                                WHERE sifra = %s AND boja = %s AND sezona = %s
-                                            ''', (nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
+                                            cursor.execute('UPDATE artikli SET prodajna_cena = %s, internet_cena = %s WHERE sifra = %s AND sezona = %s', (nova_p_cena, nova_i_cena, nova_sifra_izmena, izabrana_sezona))
+                                            cursor.execute('UPDATE artikli SET boja = %s, broj_pari = %s, slika_putanja = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
                                             
                                             conn.commit()
                                             conn.close()
@@ -463,7 +448,7 @@ elif meni == "Trenutno stanje":
                 st.markdown("---")
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (FORMULAR, ISTORIJA, FILTERI, EXCEL PREUZIMANJE) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (ZAJEDNO SA BEZBEDNIM STORNIRANJEM) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -516,35 +501,110 @@ elif meni == "Evidencija izlaza (Po danima)":
 
     st.markdown("---")
     st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
-    df_izlazi = ucitaj_istoriju_izlaza_za_sezonu(izabrana_sezona)
     
-    if not df_izlazi.empty:
-        lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
-        col_filter1, col_filter2, col_filter3 = st.columns(3)
-        with col_filter1: od_datuma = st.date_input("Od datuma:", datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d") if not df_izlazi.empty else datetime.now())
-        with col_filter2: do_datuma = st.date_input("Do datuma:", datetime.now())
-        with col_filter3: izabrani_grad_filter = st.selectbox("Izaberi grad za tabelu:", ["SVI GRADOVI"] + lista_gradova)
-        
-        od_str, do_str = od_datuma.strftime("%Y-%m-%d"), do_datuma.strftime("%Y-%m-%d")
-        df_filtrirano = df_izlazi[(df_izlazi['Datum'] >= od_str) & (df_izlazi['Datum'] <= do_str)]
-        if izabrani_grad_filter != "SVI GRADOVI":
-            df_filtrirano = df_filtrirano[df_filtrirano['Grad'] == izabrani_grad_filter]
-        
-        excel_izlazi = konvertuj_u_excel(df_filtrirano)
-        st.download_button(label="🟢 Preuzmi istoriju izlaza kao Excel", data=excel_izlazi, file_name=f"izlazi_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx")
-        
-        if not df_filtrirano.empty:
-            st.dataframe(df_filtrirano, use_container_width=True)
+    # IZOLOVANI TRY BLOK ZA TABELU
+    try:
+        df_izlazi = ucitaj_istoriju_izlaza_za_sezonu(izabrana_sezona)
+        if not df_izlazi.empty:
+            lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
+            col_filter1, col_filter2, col_filter3 = st.columns(3)
+            
+            stari_datum = datetime.now()
+            try: stari_datum = datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d")
+            except: pass
+                
+            with col_filter1: od_datuma = st.date_input("Od datuma:", stari_datum)
+            with col_filter2: do_datuma = st.date_input("Do datuma:", datetime.now())
+            with col_filter3: izabrani_grad_filter = st.selectbox("Izaberi grad za tabelu:", ["SVI GRADOVI"] + lista_gradova)
+            
+            od_str, do_str = od_datuma.strftime("%Y-%m-%d"), do_datuma.strftime("%Y-%m-%d")
+            df_filtrirano = df_izlazi[(df_izlazi['Datum'] >= od_str) & (df_izlazi['Datum'] <= do_str)]
+            if izabrani_grad_filter != "SVI GRADOVI":
+                df_filtrirano = df_filtrirano[df_filtrirano['Grad'] == izabrani_grad_filter]
+            
+            excel_izlazi = konvertuj_u_excel(df_filtrirano)
+            st.download_button(label="🟢 Preuzmi istoriju izlaza kao Excel", data=excel_izlazi, file_name=f"izlazi_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx")
+            
+            if not df_filtrirano.empty:
+                st.dataframe(df_filtrirano, use_container_width=True)
+            else:
+                st.info("Nema zabeleženih izlaza za izabrani period i grad u tabeli.")
         else:
-            st.info("Nema zabeleženih izlaza za izabrani period i grad u tabeli.")
-    else:
-        st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
+            st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
+    except Exception as e:
+        st.warning(f"Tabela sa istorijom ne može da se prikaže na standardan način, ali možete nesmetano stornirati zapise ispod. (Greška: {e})")
+
+    # INTEGRISANI ULTRA-SIGURNI PODMENI ZA STORNIRANJE ZAPISA
+    st.markdown("---")
+    st.write("### 🚨 Storniranje (Brisanje) zapisa")
+    
+    try:
+        conn = uzmi_vezu_sa_bazom()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        upit_storno = '''
+            SELECT ir.id, ir.datum, ir.sifra_artikla, ir.boja_artikla, ir.grad, ir.kolicina_izlaz
+            FROM izlaz_robe ir 
+            LEFT JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
+            WHERE a.sezona = %s OR a.sezona IS NULL
+            ORDER BY ir.id DESC LIMIT 50
+        '''
+        cursor.execute(upit_storno, (izabrana_sezona,))
+        sirovi_izlazi = cursor.fetchall()
+        conn.close()
+        
+        if not sirovi_izlazi:
+            st.info(f"Trenutno nema zapisa za storniranje u kategoriji '{izabrana_sezona}'.")
+        else:
+            opcije_za_storno = []
+            mapa_zapisa = {}
+            
+            for red in sirovi_izlazi:
+                sif_m = red['sifra_artikla'] if red['sifra_artikla'] else "OBRISAN MODEL"
+                boj_m = red['boja_artikla'] if red['boja_artikla'] else "NEPOZNATO"
+                kol_m = red['kolicina_izlaz'] if red['kolicina_izlaz'] else 0
+                dat_m = red['datum'] if red['datum'] else "---"
+                
+                tekst_opcije = f"ID: {red['id']} | Model: {sif_m} | Boja: {boj_m} | Količina: {kol_m} kom | Datum: {dat_m}"
+                opcije_za_storno.append(tekst_opcije)
+                mapa_zapisa[tekst_opcije] = red
+                
+            izabrana_opcija_storno = st.selectbox(
+                "Izaberi zapis koji želiš stornirati:", 
+                ["--- Izaberi zapis iz baze ---"] + opcije_za_storno, 
+                key="storno_izlaza_finalni_kljuc"
+            )
+            
+            if izabrana_opcija_storno != "--- Izaberi zapis iz baze ---":
+                zapis = mapa_zapisa[izabrana_opcija_storno]
+                id_zapis = int(zapis["id"])
+                sif_zapis = zapis["sifra_artikla"]
+                boj_zapis = zapis["boja_artikla"]
+                kol_zapis = int(zapis["kolicina_izlaz"])
+                
+                st.error(f"Upozorenje: Brisanjem zapisa ID {id_zapis}, vraćate {kol_zapis} kom na stanje modela {sif_zapis}.")
+                
+                if st.button("❌ POTVRDI BRISANJE I VRATI ROBU NA STANJE", type="primary", key="potvrda_storniranja_ok"):
+                    conn = uzmi_vezu_sa_bazom()
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_zapis,))
+                    
+                    cursor.execute("SELECT * FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif_zapis, boj_zapis, izabrana_sezona))
+                    if cursor.fetchone() is not None:
+                        cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
+                    
+                    conn.commit()
+                    conn.close()
+                    ucitaj_artikle_za_sezonu.clear()
+                    st.success("Zapis uspešno storniran i obrisan!")
+                    st.rerun()
+    except Exception as storno_err:
+        st.error(f"Greška u storno modulu: {storno_err}")
 
 
 # --- OPCIJA 4: KOREKCIJA STANJA ZALIHA ---
 elif meni == "Korekcija stanja zaliha":
     st.header(f"🔧 Direktna korekcija stanja artikala ({izabrana_sezona})")
-    st.write("Ova opcija služi za brze ispravke (plus ili minus) na zalihama kada želite da zaobiđete storniranje zapisa u istoriji.")
+    st.write("Ova opcija služi za brze ispravke na zalihama kada želite da zaobiđete storniranje u istoriji.")
     
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
     sve_sifre_korekcija = sorted(df_artikli["sifra"].unique().tolist()) if not df_artikli.empty else []
@@ -572,7 +632,7 @@ elif meni == "Korekcija stanja zaliha":
             if broj_komada_korekcija is None:
                 st.error("Morate uneti broj komada!")
             elif trenutni_red.empty:
-                st.error("Ne možete korigovati stanje za model/boju koji ne postoje na stanju. Prvo ih unosite kroz 'Unos nove robe'.")
+                st.error("Ne možete korigovati stanje za model/boju koji ne postoje na stanju.")
             else:
                 staro_stanje = int(trenutni_red.iloc[0]['broj_pari'])
                 if tip_operacije == "DODAJ (Povećaj zalihe)":
@@ -581,100 +641,14 @@ elif meni == "Korekcija stanja zaliha":
                     novo_stanje = staro_stanje - broj_komada_korekcija
                     
                 if novo_stanje < 0:
-                    st.error(f"Nemoguća operacija! Ne možete oduzeti više nego što ima na stanju (Konačno stanje bi bilo {novo_stanje}).")
+                    st.error(f"Nemoguća operacija! Smanjenjem biste otišli u minus.")
                 else:
                     conn = uzmi_vezu_sa_bazom()
                     cursor = conn.cursor()
-                    cursor.execute('''
-                        UPDATE artikli SET broj_pari = %s 
-                        WHERE sifra = %s AND boja = %s AND sezona = %s
-                    ''', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
+                    cursor.execute('UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
                     conn.commit()
                     conn.close()
                     
                     ucitaj_artikle_za_sezonu.clear()
-                    st.success(f"✅ Uspešno izmenjeno! Staro stanje: {staro_stanje} kom. | Novo stanje: {novo_stanje} kom.")
+                    st.success(f"✅ Izmenjeno! Staro: {staro_stanje} kom. | Novo: {novo_stanje} kom.")
                     st.rerun()
-
-
-# ====================================================================
-# --- ULTRA-SIGURAN BLOK ZA STORNIRANJE NA SAMOM KRAJU KODA ---
-# ====================================================================
-if meni == "Evidencija izlaza (Po danima)":
-    st.markdown("---")
-    st.write("### 🚨 Storniranje (Brisanje) zapisa iz baze")
-    
-    try:
-        # Otvaramo direktnu vezu sa bazom bez keširanja da vidimo sirove podatke
-        conn = uzmi_vezu_sa_bazom()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Koristimo LEFT JOIN umesto INNER JOIN da aplikacija ne bi pukla ako je neki artikal u međuvremenu obrisan
-        upit_storno = '''
-            SELECT ir.id, ir.datum, ir.sifra_artikla, ir.boja_artikla, ir.grad, ir.kolicina_izlaz
-            FROM izlaz_robe ir 
-            LEFT JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
-            WHERE a.sezona = %s OR a.sezona IS NULL
-            ORDER BY ir.id DESC LIMIT 100
-        '''
-        cursor.execute(upit_storno, (izabrana_sezona,))
-        sirovi_izlazi = cursor.fetchall()
-        conn.close()
-        
-        if not sirovi_izlazi:
-            st.info(f"Baza javlja: Trenutno nema zabeleženih izlaza za kategoriju '{izabrana_sezona}'.")
-        else:
-            opcije_za_storno = []
-            mapa_zapisa = {}
-            
-            for red in sirovi_izlazi:
-                # Osiguravamo se da nijedna vrednost nije None pre nego što napravimo tekst
-                sif_m = red['sifra_artikla'] if red['sifra_artikla'] else "NEPOZNATO"
-                boj_m = red['boja_artikla'] if red['boja_artikla'] else "NEPOZNATO"
-                kol_m = red['kolicina_izlaz'] if red['kolicina_izlaz'] else 0
-                dat_m = red['datum'] if red['datum'] else "---"
-                grd_m = red['grad'] if red['grad'] else "---"
-                
-                tekst_opcije = f"ID: {red['id']} | Model: {sif_m} | Boja: {boj_m} | Količina: {kol_m} kom | Datum: {dat_m} | Grad: {grd_m}"
-                opcije_za_storno.append(tekst_opcije)
-                mapa_zapisa[tekst_opcije] = red
-                
-            izabrana_opcija_storno = st.selectbox(
-                "Izaberi zapis koji želiš stornirati:", 
-                ["--- Izaberi zapis iz baze ---"] + opcije_za_storno, 
-                key="potpuno_novi_storno_kljuc_2026"
-            )
-            
-            if izabrana_opcija_storno != "--- Izaberi zapis iz baze ---":
-                zapis = mapa_zapisa[izabrana_opcija_storno]
-                id_zapis = int(zapis["id"])
-                sif_zapis = zapis["sifra_artikla"]
-                boj_zapis = zapis["boja_artikla"]
-                kol_zapis = int(zapis["kolicina_izlaz"])
-                
-                st.error(f"Upozorenje: Brisanjem zapisa ID {id_zapis}, količina od **{kol_zapis} kom** biće vraćena na stanje modela **{sif_zapis} ({boj_zapis})**.")
-                
-                if st.button("❌ POTVRDI BRISANJE I VRATI ROBU NA STANJE", type="primary", key="potvrda_brisanja_konacna"):
-                    conn = uzmi_vezu_sa_bazom()
-                    cursor = conn.cursor()
-                    
-                    cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_zapis,))
-                    
-                    # Proveravamo da li artikal uopšte postoji pre nego što mu uvećamo stanje
-                    cursor.execute("SELECT * FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif_zapis, boj_zapis, izabrana_sezona))
-                    if cursor.fetchone() is not None:
-                        cursor.execute('''
-                            UPDATE artikli SET broj_pari = broj_pari + %s 
-                            WHERE sifra = %s AND boja = %s AND sezona = %s
-                        ''', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
-                    
-                    conn.commit()
-                    conn.close()
-                    
-                    ucitaj_artikle_za_sezonu.clear()
-                    st.success("Zapis uspešno obrisan!")
-                    st.rerun()
-                    
-    except Exception as e:
-        # Ako se desi bilo kakva greška u ovom delu koda, Streamlit će je ispisati crvenom bojom
-        st.error(f"Pukao je storno blok! Greška: {e}")
