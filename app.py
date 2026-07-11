@@ -463,7 +463,7 @@ elif meni == "Trenutno stanje":
                 st.markdown("---")
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (SELEKCIJA ZAPISA KOJA JE UVEK VIDLJIVA) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA (PODMENI ZA BRISANJE SE SADA VIDI UVEK) ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -537,15 +537,16 @@ elif meni == "Evidencija izlaza (Po danima)":
             st.dataframe(df_filtrirano, use_container_width=True)
         else:
             st.info("Nema zabeleženih izlaza za izabrani period i grad u tabeli.")
-            
     else:
         st.write(f"Još uvek nema zabeleženih izlaza robe za sekciju {izabrana_sezona}.")
 
-    # --- NOVO: OVAJ DEO JE SADA POTPUNO VAN SVIH USLOVA I UVEK SE VIDI AKO U BAZI POSTOJE ZAPISI ---
-    if not df_izlazi.empty:
-        st.markdown("---")
-        st.write("### 🚨 Storniranje (Brisanje) zapisa iz baze")
-        
+    # --- UKLONJEN SVALKI USLOV - PODMENI JE SADA DESTRUKTIVNO VIDLJIV UVEK ---
+    st.markdown("---")
+    st.write("### 🚨 Storniranje (Brisanje) zapisa iz baze")
+    
+    if df_izlazi.empty:
+        st.caption("ℹ️ Trenutno nema nijednog zabeleženog izlaza u bazi za ovu sezonu koji možete stornirati.")
+    else:
         opcije_za_storno = []
         mapa_zapisa = {}
         
@@ -597,7 +598,7 @@ elif meni == "Korekcija stanja zaliha":
     lista_boja = ucitaj_boje()
     
     if not sve_sifre_korekcija:
-        st.warning("U ovoj sekciji trenutno nema unih artikala čije stanje možete menjati.")
+        st.warning("U ovoj sekciji trenutno nema unetih artikala čije stanje možete menjati.")
     else:
         with st.form("forma_direktna_korekcija"):
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre_korekcija)
