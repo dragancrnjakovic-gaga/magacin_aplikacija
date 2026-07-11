@@ -177,7 +177,6 @@ st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI KATEGORIJU / SEZONU:", ["Proleće-Leto", "Jesen-Zima", "Torbe"])
 st.sidebar.markdown("---")
 
-# KOREKCIJA: Iz liste menija je izbačena opcija "Korekcija stanja zaliha" kako bi bila sakrivena
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
