@@ -16,8 +16,6 @@ cloudinary.config(
 )
 
 # --- PODEŠAVANJE NEON POSTGRES BAZE ---
-# UBRZANJE 1: Konekcija je postala keširani resurs koji se ne otvara stalno iznova
-@st.cache_resource
 def uzmi_vezu_sa_bazom():
     return psycopg2.connect(st.secrets["postgres"]["url"])
 
@@ -69,27 +67,28 @@ def kreiraj_tabele():
         cursor.executemany("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", pocetne_boje)
         
     conn.commit()
-    # Uklonjen conn.close() odavde kako veza ne bi pukla pri startu
+    conn.close()
 
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
-# --- NAPREDNO I UBRZANO KEŠIRANJE PODATAKA ---
-@st.cache_data(ttl=60) # Pametno keširanje na 60 sekundi za munjevit rad kroz filtere i strane
+# --- NAPREDNO KEŠIRANJE PODATAKA ---
+@st.cache_data(ttl=300)
 def ucitaj_artikle_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
+    conn.close()
     return df
 
-@st.cache_data(ttl=300) # Šifrarnik se ređe menja, kešira se na 5 minuta
+@st.cache_data(ttl=600)
 def ucitaj_boje():
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
     cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
     boje = [red[0] for red in cursor.fetchall()]
+    conn.close()
     return boje
 
-@st.cache_data(ttl=30) # Istorija je keširana na 30 sekundi radi lakšeg filtriranja gradova i datuma
 def ucitaj_istoriju_izlaza_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     upit_istorija = '''
@@ -107,6 +106,7 @@ def ucitaj_istoriju_izlaza_za_sezonu(sezona):
         WHERE a.sezona = %s ORDER BY ir.id DESC
     '''
     df = pd.read_sql_query(upit_istorija, conn, params=(sezona,))
+    conn.close()
     return df
 
 def konvertuj_u_excel(df):
@@ -199,6 +199,10 @@ if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
 
+# Brojač za dinamički reset unosa količine na stranici za dnevni izlaz robe
+if "reset_izlaz_kolicina" not in st.session_state:
+    st.session_state["reset_izlaz_kolicina"] = 0
+
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
 if meni == "Unos nove robe":
@@ -265,8 +269,8 @@ if meni == "Unos nove robe":
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike))
             conn.commit()
+            conn.close()
             
-            # Resetujemo keš memoriju za artikle kako bi odmah prikazali novu stavku
             ucitaj_artikle_za_sezonu.clear()
             st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
@@ -290,7 +294,7 @@ if meni == "Unos nove robe":
                     cursor = conn.cursor()
                     cursor.execute("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", (nova_boja_unos,))
                     conn.commit()
-                    
+                    conn.close()
                     ucitaj_boje.clear()
                     st.success(f"Boja '{nova_boja_unos}' je dodata!")
                     st.rerun()
@@ -437,6 +441,7 @@ elif meni == "Trenutno stanje":
                                             cursor.execute('UPDATE artikli SET boja = %s, broj_pari = %s, slika_putanja = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
                                             
                                             conn.commit()
+                                            conn.close()
                                             ucitaj_artikle_za_sezonu.clear()
                                             st.success("Izmene uspešno sačuvane!")
                                             st.rerun()
@@ -449,7 +454,7 @@ elif meni == "Trenutno stanje":
                                     cursor = conn.cursor()
                                     cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
                                     conn.commit()
-                                    
+                                    conn.close()
                                     ucitaj_artikle_za_sezonu.clear()
                                     st.warning("Obrisano!")
                                     st.rerun()
@@ -472,6 +477,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         
         with col1:
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now())
+            
             trenutna_sifra_key = f"izlaz_sifra_{izabrana_sezona}"
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key=trenutna_sifra_key)
             
@@ -488,7 +494,10 @@ elif meni == "Evidencija izlaza (Po danima)":
             zaliha_komada = int(filtriran_artikal.iloc[0]["broj_pari"])
             
         with col2:
-            kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None)
+            # Korišćenje dinamičkog ključa kako bi se vrednost bezbedno očistila/resetovala nakon upisa
+            kljuc_kolicina = f"kolicina_izlaz_input_{st.session_state['reset_izlaz_kolicina']}"
+            kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None, key=kljuc_kolicina)
+            
             prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=fabricka_cena)
             nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None)
             
@@ -513,8 +522,12 @@ elif meni == "Evidencija izlaza (Po danima)":
                 cursor.execute('UPDATE artikli SET broj_pari = broj_pari - %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kolicina_izlaza, izabrana_sifra, izabrana_boja, izabrana_sezona))
                 
                 conn.commit()
+                conn.close()
+                
+                # Inkrementiramo brojač za reset polja Količina kako bi sledeći put bilo prazno (None)
+                st.session_state["reset_izlaz_kolicina"] += 1
+                
                 ucitaj_artikle_za_sezonu.clear()
-                ucitaj_istoriju_izlaza_za_sezonu.clear()
                 st.success("✅ Izlaz uspešno proknjižen!")
                 st.rerun()
 
@@ -552,7 +565,6 @@ elif meni == "Evidencija izlaza (Po danima)":
     except Exception as e:
         st.warning(f"Tabela sa istorijom ne može da se prikaže na standardan način, ali možete nesmetano stornirati zapise ispod. (Greška: {e})")
 
-    # Podmeni za storniranje zapisa
     st.markdown("---")
     st.write("### 🚨 Storniranje (Brisanje) zapisa")
     
@@ -568,6 +580,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         '''
         cursor.execute(upit_storno, (izabrana_sezona,))
         sirovi_izlazi = cursor.fetchall()
+        conn.close()
         
         if not sirovi_izlazi:
             st.info(f"Trenutno nema zapisa za storniranje u kategoriji '{izabrana_sezona}'.")
@@ -610,8 +623,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                         cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
                     
                     conn.commit()
+                    conn.close()
                     ucitaj_artikle_za_sezonu.clear()
-                    ucitaj_istoriju_izlaza_za_sezonu.clear()
                     st.success("Zapis uspešno storniran i obrisan!")
                     st.rerun()
     except Exception as storno_err:
@@ -664,6 +677,7 @@ elif meni == "Korekcija stanja zaliha":
                     cursor = conn.cursor()
                     cursor.execute('UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
                     conn.commit()
+                    conn.close()
                     
                     ucitaj_artikle_za_sezonu.clear()
                     st.success(f"✅ Izmenjeno! Staro: {staro_stanje} kom. | Novo: {novo_stanje} kom.")
