@@ -16,6 +16,8 @@ cloudinary.config(
 )
 
 # --- PODEŠAVANJE NEON POSTGRES BAZE ---
+# UBRZANJE 1: Konekcija je postala keširani resurs koji se ne otvara stalno iznova
+@st.cache_resource
 def uzmi_vezu_sa_bazom():
     return psycopg2.connect(st.secrets["postgres"]["url"])
 
@@ -67,28 +69,27 @@ def kreiraj_tabele():
         cursor.executemany("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", pocetne_boje)
         
     conn.commit()
-    conn.close()
+    # Uklonjen conn.close() odavde kako veza ne bi pukla pri startu
 
 # Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
-# --- NAPREDNO KEŠIRANJE PODATAKA ---
-@st.cache_data(ttl=300)
+# --- NAPREDNO I UBRZANO KEŠIRANJE PODATAKA ---
+@st.cache_data(ttl=60) # Pametno keširanje na 60 sekundi za munjevit rad kroz filtere i strane
 def ucitaj_artikle_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
-    conn.close()
     return df
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300) # Šifrarnik se ređe menja, kešira se na 5 minuta
 def ucitaj_boje():
     conn = uzmi_vezu_sa_bazom()
     cursor = conn.cursor()
     cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
     boje = [red[0] for red in cursor.fetchall()]
-    conn.close()
     return boje
 
+@st.cache_data(ttl=30) # Istorija je keširana na 30 sekundi radi lakšeg filtriranja gradova i datuma
 def ucitaj_istoriju_izlaza_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
     upit_istorija = '''
@@ -106,7 +107,6 @@ def ucitaj_istoriju_izlaza_za_sezonu(sezona):
         WHERE a.sezona = %s ORDER BY ir.id DESC
     '''
     df = pd.read_sql_query(upit_istorija, conn, params=(sezona,))
-    conn.close()
     return df
 
 def konvertuj_u_excel(df):
@@ -247,7 +247,6 @@ if meni == "Unos nove robe":
         if slika is not None:
             with st.spinner("Slanje slike na Cloudinary..."):
                 try:
-                    # Garantovano očuvan tačan naziv varijable rezultat_slike
                     rezultat_slike = cloudinary.uploader.upload(
                         slika, folder="magacin/", public_id=f"{sifra}_{boja}",
                         transformation=[{"width": 800, "crop": "limit"}, {"quality": "auto", "fetch_format": "auto"}]
@@ -266,11 +265,12 @@ if meni == "Unos nove robe":
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike))
             conn.commit()
-            conn.close()
             
+            # Resetujemo keš memoriju za artikle kako bi odmah prikazali novu stavku
             ucitaj_artikle_za_sezonu.clear()
             st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
+            
             st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}'!")
             st.rerun()
         except psycopg2.IntegrityError:
@@ -290,7 +290,7 @@ if meni == "Unos nove robe":
                     cursor = conn.cursor()
                     cursor.execute("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", (nova_boja_unos,))
                     conn.commit()
-                    conn.close()
+                    
                     ucitaj_boje.clear()
                     st.success(f"Boja '{nova_boja_unos}' je dodata!")
                     st.rerun()
@@ -343,7 +343,7 @@ elif meni == "Trenutno stanje":
             
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
-                
+            
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
@@ -361,6 +361,7 @@ elif meni == "Trenutno stanje":
                 boj = row['boja']
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
+                
                 if not trenutna_slika or trenutna_slika == "":
                     trenutna_slika = pronadji_sliku_u_df(df, sif)
                 
@@ -436,7 +437,6 @@ elif meni == "Trenutno stanje":
                                             cursor.execute('UPDATE artikli SET boja = %s, broj_pari = %s, slika_putanja = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
                                             
                                             conn.commit()
-                                            conn.close()
                                             ucitaj_artikle_za_sezonu.clear()
                                             st.success("Izmene uspešno sačuvane!")
                                             st.rerun()
@@ -449,14 +449,14 @@ elif meni == "Trenutno stanje":
                                     cursor = conn.cursor()
                                     cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
                                     conn.commit()
-                                    conn.close()
+                                    
                                     ucitaj_artikle_za_sezonu.clear()
                                     st.warning("Obrisano!")
                                     st.rerun()
                 st.markdown("---")
 
 
-# --- OPCIJA 3: EVIDENCIJA IZLAZA (REŠENO DINAMIČKO OSVEŽAVANJE I USLOV ZA DUGME) ---
+# --- OPCIJA 3: EVIDENCIJA IZLAZA ---
 elif meni == "Evidencija izlaza (Po danima)":
     st.header(f"📆 Dnevni izlaz robe - Sekcija: {izabrana_sezona}")
     df_artikli = ucitaj_artikle_za_sezonu(izabrana_sezona)
@@ -467,23 +467,18 @@ elif meni == "Evidencija izlaza (Po danima)":
     else:
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
         
-        # SVE SELEKTORE OD KOJIH ZAVISI EKRAN DRŽIMO VAN ST.FORME DA BI RADILI DINAMIČKI
         st.write("### 📝 Popunite podatke za novi izlaz")
         col1, col2 = st.columns(2)
         
         with col1:
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now())
-            
-            # Ako se promeni šifra, radimo rerun da povučemo njene boje
             trenutna_sifra_key = f"izlaz_sifra_{izabrana_sezona}"
             izabrana_sifra = st.selectbox("Izaberi šifru modela:", sve_sifre, key=trenutna_sifra_key)
             
-            # Izvlačimo samo boje koje postoje u bazi ZA SELEKTOVANU ŠIFRU
             boje_za_sifru = sorted(df_artikli[df_artikli["sifra"] == izabrana_sifra]["boja"].unique().tolist())
             izabrana_boja = st.selectbox("Izaberi boju modela:", boje_za_sifru, key=f"izlaz_boja_{izabrana_sezona}")
             izabrani_grad = st.selectbox("Izaberi grad:", lista_gradova)
             
-        # POUZDANO RAČUNANJE ZALIHA I CENE U REALNOM VREMENU PRE NEGO ŠTO ODEMO NA KOLONU 2
         filtriran_artikal = df_artikli[(df_artikli["sifra"] == izabrana_sifra) & (df_artikli["boja"] == izabrana_boja)]
         
         fabricka_cena = 0.0
@@ -494,16 +489,12 @@ elif meni == "Evidencija izlaza (Po danima)":
             
         with col2:
             kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None)
-            
-            # Postavljamo fabričku cenu kao početnu, ali korisnik može da promeni ili obriše
             prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=fabricka_cena)
             nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None)
             
-            # VRAĆENO PLAVO POLJE ZA PRIKAZ TRENUTNOG STANJA
             tekst_zaliha = "komada" if izabrana_sezona == "Torbe" else "pari"
             st.info(f"📊 Trenutno stanje u magacinu za model **{izabrana_sifra} ({izabrana_boja})**: **{zaliha_komada} {tekst_zaliha}**")
 
-        # DUGME POSTAJE AKTIVNO TEK KADA SE UNESE PRODAJNA CENA I KOLIČINA
         dugme_onemoguceno = (prodajna_cena_par is None or prodajna_cena_par <= 0.0 or kolicina_izlaza is None)
         
         st.write("")
@@ -520,16 +511,16 @@ elif meni == "Evidencija izlaza (Po danima)":
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza, izabrani_grad, prodajna_cena_par, nabavna_cena_par))
                 cursor.execute('UPDATE artikli SET broj_pari = broj_pari - %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kolicina_izlaza, izabrana_sifra, izabrana_boja, izabrana_sezona))
+                
                 conn.commit()
-                conn.close()
                 ucitaj_artikle_za_sezonu.clear()
+                ucitaj_istoriju_izlaza_za_sezonu.clear()
                 st.success("✅ Izlaz uspešno proknjižen!")
                 st.rerun()
 
     st.markdown("---")
     st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
     
-    # IZOLOVANI TRY BLOK ZA TABELU SA TAČNIM C STUBOM (Boja proizvoda)
     try:
         df_izlazi = ucitaj_istoriju_izlaza_za_sezonu(izabrana_sezona)
         if not df_izlazi.empty:
@@ -561,7 +552,7 @@ elif meni == "Evidencija izlaza (Po danima)":
     except Exception as e:
         st.warning(f"Tabela sa istorijom ne može da se prikaže na standardan način, ali možete nesmetano stornirati zapise ispod. (Greška: {e})")
 
-    # INTEGRISANI ULTRA-SIGURNI PODMENI ZA STORNIRANJE ZAPISA
+    # Podmeni za storniranje zapisa
     st.markdown("---")
     st.write("### 🚨 Storniranje (Brisanje) zapisa")
     
@@ -577,7 +568,6 @@ elif meni == "Evidencija izlaza (Po danima)":
         '''
         cursor.execute(upit_storno, (izabrana_sezona,))
         sirovi_izlazi = cursor.fetchall()
-        conn.close()
         
         if not sirovi_izlazi:
             st.info(f"Trenutno nema zapisa za storniranje u kategoriji '{izabrana_sezona}'.")
@@ -620,8 +610,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                         cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
                     
                     conn.commit()
-                    conn.close()
                     ucitaj_artikle_za_sezonu.clear()
+                    ucitaj_istoriju_izlaza_za_sezonu.clear()
                     st.success("Zapis uspešno storniran i obrisan!")
                     st.rerun()
     except Exception as storno_err:
@@ -674,7 +664,6 @@ elif meni == "Korekcija stanja zaliha":
                     cursor = conn.cursor()
                     cursor.execute('UPDATE artikli SET broj_pari = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (novo_stanje, izabrana_sifra, izabrana_boja, izabrana_sezona))
                     conn.commit()
-                    conn.close()
                     
                     ucitaj_artikle_za_sezonu.clear()
                     st.success(f"✅ Izmenjeno! Staro: {staro_stanje} kom. | Novo: {novo_stanje} kom.")
