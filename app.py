@@ -306,7 +306,7 @@ if meni == "Unos nove robe":
 
     st.markdown("---")
     
-    # 2. TABELA UNETIH ARTIKALA SORTIRANA DA NAJNOVIJI BUDU NA VRHU
+    # 2. TABELA UNETIH ARTIKALA SORTIRANA DA NAJNOVIJI BUDU NA VRHU SA FILTEROM DATUMA ZA EXCEL
     st.subheader(f"📋 Pregled unete robe ({izabrana_sezona})")
     df_unos_pregled = ucitaj_artikle_za_sezonu(izabrana_sezona)
     
@@ -331,14 +331,46 @@ if meni == "Unos nove robe":
         kolone_redosted = ["Datum unosa", "Šifra modela", "Boja proizvoda", relabel_kom, relabel_kut, relabel_karton, "Prodajna cena (RSD)", "Internet cena (RSD)"]
         df_prikaz_unos = df_prikaz_unos[[c for c in kolone_redosted if c in df_prikaz_unos.columns]]
         
-        # SORTIRANJE: Najnovije uneti artikli sa popunjenim datumom idu na vrh tabele
+        # Sortiranje na ekranu: Najnoviji na vrhu
         df_prikaz_unos = df_prikaz_unos.sort_values(by="Datum unosa", ascending=False, na_position="last")
         
-        excel_unosa = konvertuj_u_excel(df_prikaz_unos)
+        # FILTER OPSEGA DATUMA ZA EXCEL IZVOZ
+        st.write("#### 📆 Filter datuma za izvoz u Excel:")
+        col_ex1, col_ex2 = st.columns(2)
+        
+        # Pronalaženje minimalnog unetog datuma radi lakšeg pretraživanja
+        minimalni_datum_baza = datetime.now()
+        sve_unete_vrednosti_datuma = df_prikaz_unos["Datum unosa"].dropna()
+        if not sve_unete_vrednosti_datuma.empty:
+            try:
+                minimalni_datum_baza = datetime.strptime(sve_unete_vrednosti_datuma.min(), "%Y-%m-%d")
+            except: pass
+            
+        with col_ex1:
+            izvoz_od = st.date_input("Od datuma unosa:", minimalni_datum_baza, key="izvoz_datum_od")
+        with col_ex2:
+            izvoz_do = st.date_input("Do datuma unosa:", datetime.now(), key="izvoz_datum_do")
+            
+        # Filtriranje tabele na osnovu izabranog opsega
+        od_str, do_str = izvoz_od.strftime("%Y-%m-%d"), izvoz_do.strftime("%Y-%m-%d")
+        
+        # Pravimo privremeni DataFrame za Excel koji sadrži samo filtrirane datume
+        df_za_excel = df_prikaz_unos[
+            (df_prikaz_unos["Datum unosa"] >= od_str) & 
+            (df_prikaz_unos["Datum unosa"] <= do_str)
+        ]
+        
+        # Ako ima i starih artikala bez datuma (None/NaN) a korisnik želi da ih vidi/izveze, zadržavamo ih na dnu ako je izabran najstariji mogući datum
+        staro_stanje_bez_datuma = df_prikaz_unos[df_prikaz_unos["Datum unosa"].isna()]
+        if izvoz_od == minimalni_datum_baza and not staro_stanje_bez_datuma.empty:
+            df_za_excel = pd.concat([df_za_excel, staro_stanje_bez_datuma], ignore_index=True)
+
+        excel_unosa = konvertuj_u_excel(df_za_excel)
+        
         st.download_button(
-            label="🟢 Preuzmi tabelu unetih artikala kao Excel (.xlsx)",
+            label=f"🟢 Preuzmi profiltrirane artikle ({len(df_za_excel)} modela) kao Excel (.xlsx)",
             data=excel_unosa,
-            file_name=f"uneseni_artikli_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            file_name=f"uneseni_artikli_{izabrana_sezona}_od_{od_str}_do_{do_str}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
