@@ -29,7 +29,7 @@ def uzmi_vezu_sa_bazom():
             conn = inicijalizuj_bazu()
         return conn
     except Exception:
-        # Tiho hvatamo "SSL SYSCALL / EOF" i OperationalError greške, čistimo keš i vraćamo novu vezu
+        # Tiho hvatamo "SSL SYSCALL / EOF" i OperationalError greške, čistimo kaš i vraćamo novu vezu
         st.cache_resource.clear()
         return inicijalizuj_bazu()
 
@@ -192,6 +192,14 @@ st.markdown("""
         border-top: 1px solid var(--border-color);
         border-right: 1px solid var(--border-color);
         border-bottom: 1px solid var(--border-color);
+    }
+    
+    .podsetnik-unosa {
+        font-size: 0.85rem !important;
+        color: #888888;
+        font-style: italic;
+        margin-top: -8px;
+        margin-bottom: 12px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -456,6 +464,16 @@ elif meni == "Trenutno stanje":
             kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
             df_za_prikaz = df_prikaz.iloc[start_indeks:kraj_indeks]
             
+            # Da bismo na trenutnom stanju izračunali originalno unete kutije na osnovu istorije prodaje,
+            # povlačimo ukupnu količinu izlaza iz baze za prikazane artikle kako bismo rekonstruisali inicijalno stanje.
+            try:
+                conn = uzmi_vezu_sa_bazom()
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                cursor.execute("SELECT sifra_artikla, boja_artikla, SUM(kolicina_izlaz) as ukupno_izaslo FROM izlaz_robe GROUP BY sifra_artikla, boja_artikla")
+                izlaz_mapa = {f"{red['sifra_artikla']}_{red['boja_artikla']}": red['ukupno_izaslo'] for red in cursor.fetchall()}
+            except Exception:
+                izlaz_mapa = {}
+            
             for index, row in df_za_prikaz.iterrows():
                 sif = row['sifra']
                 boj = row['boja']
@@ -470,7 +488,21 @@ elif meni == "Trenutno stanje":
                 p_cena_int = int(row['prodajna_cena'])
                 i_cena_int = int(row['internet_cena'])
                 
-                with st.container():
+                # --- PRORAČUN POČETNO UNETIH KUTIJA (KARTONA) ---
+                trenutno_na_stanju = int(row["broj_pari"])
+                izaslo_iz_magacina = int(izlaz_mapa.get(kljuc_id, 0))
+                pocetni_pari = trenutno_na_stanju + izaslo_iz_magacina
+                pari_u_kut = int(row["pari_u_kutiji"])
+                
+                pocetni_broj_kutija = round(pocetni_pari / pari_u_kut, 2)
+                datum_unosa_ispis = row.get("datum_unosa")
+                if not datum_unosa_ispis or pd.isna(datum_unosa_ispis):
+                    datum_unosa_ispis = "Nepoznat datum"
+                
+                sufiks_kartona = "pakovanja" if izabrana_sezona == "Torbe" else "kartona"
+                sufiks_jedinica = "kom" if izabrana_sezona == "Torbe" else "pari"
+                
+                with St_kontejner := st.container():
                     col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
                     with col_slika:
                         if trenutna_slika:
@@ -483,6 +515,13 @@ elif meni == "Trenutno stanje":
                             
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
+                        
+                        # ISPIS POČETNOG STANJA I DATUMA UNOSA KAO PODSETNIK
+                        st.markdown(
+                            f'<div class="podsetnik-unosa">📆 Uneto: {datum_unosa_ispis} | 📦 Početno ušlo: {pocetni_pari} {sufiks_jedinica} ({pocetni_broj_kutija} {sufiks_kartona})</div>', 
+                            unsafe_allow_html=True
+                        )
+                        
                         c1, c2, c3, c4 = st.columns(4)
                         m_kol_label = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari na stanju"
                         m_pak_label = "Pakovanje (kut. + kom)" if izabrana_sezona == "Torbe" else "Pakovanje"
