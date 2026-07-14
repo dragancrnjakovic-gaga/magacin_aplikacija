@@ -195,8 +195,8 @@ st.markdown("""
     }
     
     .podsetnik-unosa {
-        font-size: 0.85rem !important;
-        color: #888888;
+        font-size: 1.02rem !important;  /* Povećano za oko 20% radi bolje čitljivosti */
+        color: #000000;                /* Boja promenjena u crnu */
         font-style: italic;
         margin-top: -8px;
         margin-bottom: 12px;
@@ -480,7 +480,6 @@ elif meni == "Trenutno stanje":
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
-                # ISPRAVLJENO: Ovde je stajalo "trenches_slika" umesto "trenutna_slika"
                 if not trenutna_slika or trenutna_slika == "":
                     trenutna_slika = pronadji_sliku_u_df(df, sif)
                 
@@ -503,7 +502,6 @@ elif meni == "Trenutno stanje":
                 sufiks_kartona = "pakovanja" if izabrana_sezona == "Torbe" else "kartona"
                 sufiks_jedinica = "kom" if izabrana_sezona == "Torbe" else "pari"
                 
-                # ISPRAVLJENO: Ovde je uklonjen ":=" operator unutar "with" bloka jer uzrokuje SyntaxError
                 with st.container():
                     col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
                     with col_slika:
@@ -518,7 +516,7 @@ elif meni == "Trenutno stanje":
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         
-                        # ISPIS POČETNOG STANJA I DATUMA UNOSA KAO PODSETNIK
+                        # ISPIS POČETNOG STANJA I DATUMA UNOSA SA NOVIM RE-STILIZOVANIM ELEMENTIMA
                         st.markdown(
                             f'<div class="podsetnik-unosa">📆 Uneto: {datum_unosa_ispis} | 📦 Početno ušlo: {pocetni_pari} {sufiks_jedinica} ({pocetni_broj_kutija} {sufiks_kartona})</div>', 
                             unsafe_allow_html=True
