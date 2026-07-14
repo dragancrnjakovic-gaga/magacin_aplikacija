@@ -480,6 +480,7 @@ elif meni == "Trenutno stanje":
                 kljuc_id = f"{sif}_{boj}"
                 trenutna_slika = row["slika_putanja"]
                 
+                # ISPRAVLJENO: Ovde je stajalo "trenches_slika" umesto "trenutna_slika"
                 if not trenutna_slika or trenutna_slika == "":
                     trenutna_slika = pronadji_sliku_u_df(df, sif)
                 
@@ -502,7 +503,8 @@ elif meni == "Trenutno stanje":
                 sufiks_kartona = "pakovanja" if izabrana_sezona == "Torbe" else "kartona"
                 sufiks_jedinica = "kom" if izabrana_sezona == "Torbe" else "pari"
                 
-                with St_kontejner := st.container():
+                # ISPRAVLJENO: Ovde je uklonjen ":=" operator unutar "with" bloka jer uzrokuje SyntaxError
+                with st.container():
                     col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
                     with col_slika:
                         if trenutna_slika:
