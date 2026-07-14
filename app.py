@@ -62,10 +62,17 @@ def kreiraj_tabele():
             )
         ''')
         
+        # Automatsko dodavanje novih kolona u bazu bez brisanja starih podataka
         try:
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS grad TEXT;")
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS prodajna_cena REAL;")
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS nabavna_cena REAL;")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        try:
+            cursor.execute("ALTER TABLE artikli ADD COLUMN IF NOT EXISTS datum_unosa TEXT;")
             conn.commit()
         except Exception:
             conn.rollback()
@@ -222,6 +229,10 @@ if meni == "Unos nove robe":
     st.header(f"➕ Unos novog artikla ({izabrana_sezona})")
     lista_boja = ucitaj_boje()
     
+    # 1. POLJE ZA IZBOR DATUMA NA PRVOM MESTU
+    datum_unosa_odabir = st.date_input("📆 Izaberi datum unosa robe:", datetime.now())
+    st.markdown("---")
+    
     if "unos_sifra" not in st.session_state: st.session_state["unos_sifra"] = ""
     if "unos_boja" not in st.session_state: st.session_state["unos_boja"] = lista_boja[0] if lista_boja else ""
     
@@ -277,20 +288,59 @@ if meni == "Unos nove robe":
         try:
             conn = uzmi_vezu_sa_bazom()
             cursor = conn.cursor()
+            # Ubacivanje artikla zajedno sa izabranim datumom
             cursor.execute('''
-                INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike))
+                INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja, datum_unosa)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike, datum_unosa_odabir.strftime("%Y-%m-%d")))
             conn.commit()
            
             ucitaj_artikle_za_sezonu.clear()
             st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
             
-            st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}'!")
+            st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}' sa datumom unosa {datum_unosa_odabir.strftime('%Y-%m-%d')}!")
             st.rerun()
         except psycopg2.IntegrityError:
             st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u ovoj sekciji!")
+
+    st.markdown("---")
+    
+    # 2. TABELA UNETIH ARTIKALA SA PRORAČUNOM KARTONA I IZVOZOM U EXCEL
+    st.subheader(f"📋 Pregled unete robe ({izabrana_sezona})")
+    df_unos_pregled = ucitaj_artikle_za_sezonu(izabrana_sezona)
+    
+    if df_unos_pregled.empty:
+        st.info("Još uvek nema unetih artikala u ovoj sekciji.")
+    else:
+        df_prikaz_unos = df_unos_pregled.copy()
+        
+        # Proračun ukupnog broja kartona (Količina pari / Broj pari u kutiji) sa zaokruživanjem na 2 decimale
+        df_prikaz_unos["Ukupno kartona"] = (df_prikaz_unos["broj_pari"] / df_prikaz_unos["pari_u_kutiji"]).round(2)
+        
+        relabel_kom = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari"
+        relabel_kut = "Kutija/Pakovanja" if izabrana_sezona == "Torbe" else "Pari u kutiji"
+        relabel_karton = "Ukupno pakovanja" if izabrana_sezona == "Torbe" else "Ukupno kartona"
+        
+        df_prikaz_unos = df_prikaz_unos.rename(columns={
+            "datum_unosa": "Datum unosa", "sifra": "Šifra modela", "boja": "Boja proizvoda", 
+            "broj_pari": relabel_kom, "pari_u_kutiji": relabel_kut, "Ukupno kartona": relabel_karton,
+            "prodajna_cena": "Prodajna cena (RSD)", "internet_cena": "Internet cena (RSD)"
+        })
+        
+        # Preslažemo kolone radi lepšeg rasporeda u tabeli
+        kolone_redosted = ["Datum unosa", "Šifra modela", "Boja proizvoda", relabel_kom, relabel_kut, relabel_karton, "Prodajna cena (RSD)", "Internet cena (RSD)"]
+        df_prikaz_unos = df_prikaz_unos[[c for c in kolone_redosted if c in df_prikaz_unos.columns]]
+        
+        excel_unosa = konvertuj_u_excel(df_prikaz_unos)
+        st.download_button(
+            label="🟢 Preuzmi tabelu unetih artikala kao Excel (.xlsx)",
+            data=excel_unosa,
+            file_name=f"uneseni_artikli_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.dataframe(df_prikaz_unos, use_container_width=True)
 
     st.markdown("---")
     st.subheader("🎨 Upravljanje listom boja")
