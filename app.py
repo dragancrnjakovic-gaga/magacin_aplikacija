@@ -499,9 +499,14 @@ elif meni == "Evidencija izlaza (Po danima)":
         
         fabricka_cena = 0.0
         zaliha_komada = 0
+        
+        # DEFINISANJE AUTOMATSKOG ODABIRA CENE NA OSNOVU GRADA
         if not filtriran_artikal.empty:
-            fabricka_cena = float(filtriran_artikal.iloc[0]["prodajna_cena"])
             zaliha_komada = int(filtriran_artikal.iloc[0]["broj_pari"])
+            if izabrani_grad == "Internet":
+                fabricka_cena = float(filtriran_artikal.iloc[0]["internet_cena"])
+            else:
+                fabricka_cena = float(filtriran_artikal.iloc[0]["prodajna_cena"])
             
         with col2:
             kljuc_kolicina_izlaza = f"kolicina_izlaz_{st.session_state['reset_izlaz_kolicina']}"
