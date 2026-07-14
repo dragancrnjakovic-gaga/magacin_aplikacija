@@ -125,7 +125,8 @@ def ucitaj_istoriju_izlaza_za_sezonu(sezona):
                ir.nabavna_cena AS "Nabavna cena po paru", 
                (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
         FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
-        WHERE a.sezona = %s ORDER BY ir.id DESC
+        WHERE a.sezona = %s 
+        ORDER BY ir.id DESC
     '''
     df = pd.read_sql_query(upit_istorija, conn, params=(sezona,))
     return df
@@ -288,7 +289,6 @@ if meni == "Unos nove robe":
         try:
             conn = uzmi_vezu_sa_bazom()
             cursor = conn.cursor()
-            # Ubacivanje artikla zajedno sa izabranim datumom
             cursor.execute('''
                 INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja, datum_unosa)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -306,7 +306,7 @@ if meni == "Unos nove robe":
 
     st.markdown("---")
     
-    # 2. TABELA UNETIH ARTIKALA SA PRORAČUNOM KARTONA I IZVOZOM U EXCEL
+    # 2. TABELA UNETIH ARTIKALA SORTIRANA DA NAJNOVIJI BUDU NA VRHU
     st.subheader(f"📋 Pregled unete robe ({izabrana_sezona})")
     df_unos_pregled = ucitaj_artikle_za_sezonu(izabrana_sezona)
     
@@ -315,7 +315,7 @@ if meni == "Unos nove robe":
     else:
         df_prikaz_unos = df_unos_pregled.copy()
         
-        # Proračun ukupnog broja kartona (Količina pari / Broj pari u kutiji) sa zaokruživanjem na 2 decimale
+        # Proračun kartona
         df_prikaz_unos["Ukupno kartona"] = (df_prikaz_unos["broj_pari"] / df_prikaz_unos["pari_u_kutiji"]).round(2)
         
         relabel_kom = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari"
@@ -328,9 +328,11 @@ if meni == "Unos nove robe":
             "prodajna_cena": "Prodajna cena (RSD)", "internet_cena": "Internet cena (RSD)"
         })
         
-        # Preslažemo kolone radi lepšeg rasporeda u tabeli
         kolone_redosted = ["Datum unosa", "Šifra modela", "Boja proizvoda", relabel_kom, relabel_kut, relabel_karton, "Prodajna cena (RSD)", "Internet cena (RSD)"]
         df_prikaz_unos = df_prikaz_unos[[c for c in kolone_redosted if c in df_prikaz_unos.columns]]
+        
+        # SORTIRANJE: Najnovije uneti artikli sa popunjenim datumom idu na vrh tabele
+        df_prikaz_unos = df_prikaz_unos.sort_values(by="Datum unosa", ascending=False, na_position="last")
         
         excel_unosa = konvertuj_u_excel(df_prikaz_unos)
         st.download_button(
@@ -550,7 +552,6 @@ elif meni == "Evidencija izlaza (Po danima)":
         fabricka_cena = 0.0
         zaliha_komada = 0
         
-        # DEFINISANJE AUTOMATSKOG ODABIRA CENE NA OSNOVU GRADA
         if not filtriran_artikal.empty:
             zaliha_komada = int(filtriran_artikal.iloc[0]["broj_pari"])
             if izabrani_grad == "Internet":
@@ -627,7 +628,6 @@ elif meni == "Evidencija izlaza (Po danima)":
     except Exception as e:
         st.warning(f"Tabela sa istorijom ne može da se prikaže na standardan način, ali možete nesmetano stornirati zapise ispod. (Greška: {e})")
 
-    # Podmeni za storniranje zapisa
     st.markdown("---")
     st.write("### 🚨 Storniranje (Brisanje) zapisa")
     
