@@ -455,10 +455,33 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
+            # --- GORNJA NAVIGACIJA ---
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
-                sve_stranice = list(range(1, broj_stranica + 1))
-                st.session_state["trenutna_stranica"] = st.selectbox("Idi na stranicu:", sve_stranice, index=sve_stranice.index(st.session_state["trenutna_stranica"]))
+                
+                col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
+                with col_nav1:
+                    prethodna_onemogucena = st.session_state["trenutna_stranica"] == 1
+                    if st.button("⬅️ Prethodna", key="prev_gore", disabled=prethodna_onemogucena):
+                        st.session_state["trenutna_stranica"] -= 1
+                        st.rerun()
+                with col_nav2:
+                    sve_stranice = list(range(1, broj_stranica + 1))
+                    izabrana_str = st.selectbox(
+                        "Idi na stranicu:", 
+                        sve_stranice, 
+                        index=sve_stranice.index(st.session_state["trenutna_stranica"]),
+                        key="izbor_str_gore"
+                    )
+                    if izabrana_str != st.session_state["trenutna_stranica"]:
+                        st.session_state["trenutna_stranica"] = izabrana_str
+                        st.rerun()
+                with col_nav3:
+                    sledec_onemogucena = st.session_state["trenutna_stranica"] == broj_stranica
+                    if st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena):
+                        st.session_state["trenutna_stranica"] += 1
+                        st.rerun()
+                st.markdown("---")
             
             start_indeks = (st.session_state["trenutna_stranica"] - 1) * BROJ_ARTIKALA_PO_STRANICI
             kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
@@ -516,7 +539,7 @@ elif meni == "Trenutno stanje":
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         
-                        # ISPIS POČETNOG STANJA I DATUMA UNOSA SA NOVIM RE-STILIZOVANIM ELEMENTIMA
+                        # ISPIS POČETNOG STANJA I DATUMA UNOSA
                         st.markdown(
                             f'<div class="podsetnik-unosa">📆 Uneto: {datum_unosa_ispis} | 📦 Početno ušlo: {pocetni_pari} {sufiks_jedinica} ({pocetni_broj_kutija} {sufiks_kartona})</div>', 
                             unsafe_allow_html=True
@@ -592,6 +615,33 @@ elif meni == "Trenutno stanje":
                                     ucitaj_artikle_za_sezonu.clear()
                                     st.warning("Obrisano!")
                                     st.rerun()
+                st.markdown("---")
+
+            # --- DONJA NAVIGACIJA NA KRAJU STRANICE ---
+            if broj_stranica > 1:
+                st.write("")
+                col_nav_d1, col_nav_d2, col_nav_d3 = st.columns([1, 2, 1])
+                with col_nav_d1:
+                    prethodna_onemogucena_d = st.session_state["trenutna_stranica"] == 1
+                    if st.button("⬅️ Prethodna", key="prev_dole", disabled=prethodna_onemogucena_d):
+                        st.session_state["trenutna_stranica"] -= 1
+                        st.rerun()
+                with col_nav_d2:
+                    sve_stranice_d = list(range(1, broj_stranica + 1))
+                    izabrana_str_d = st.selectbox(
+                        "Idi na stranicu (dno):", 
+                        sve_stranice_d, 
+                        index=sve_stranice_d.index(st.session_state["trenutna_stranica"]),
+                        key="izbor_str_dole"
+                    )
+                    if izabrana_str_d != st.session_state["trenutna_stranica"]:
+                        st.session_state["trenutna_stranica"] = izabrana_str_d
+                        st.rerun()
+                with col_nav_d3:
+                    sledec_onemogucena_d = st.session_state["trenutna_stranica"] == broj_stranica
+                    if st.button("Sledeća ➡️", key="next_dole", disabled=sledec_onemogucena_d):
+                        st.session_state["trenutna_stranica"] += 1
+                        st.rerun()
                 st.markdown("---")
 
 
