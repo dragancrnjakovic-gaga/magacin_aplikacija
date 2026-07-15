@@ -144,8 +144,12 @@ def pronadji_sliku_u_df(df, sifra):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
+# Omogućavamo glatko skrolovanje kroz CSS i eliminišemo podvlačenje teksta na linku
 st.markdown("""
     <style>
+    html {
+        scroll-behavior: smooth !important;
+    }
     .block-container {
         padding-top: 3.5rem !important;
         padding-bottom: 2rem !important;
@@ -203,23 +207,31 @@ st.markdown("""
         justify-content: center;
         margin: 30px 0 10px 0;
     }
+    .dugme-vrh-link {
+        text-decoration: none !important;
+        display: inline-block;
+    }
     .dugme-vrh {
         background-color: #26a69a !important;
         color: white !important;
         border: none !important;
-        padding: 10px 24px !important;
+        padding: 12px 30px !important;
         font-size: 0.95rem !important;
         font-weight: bold !important;
         border-radius: 4px !important;
         cursor: pointer !important;
         transition: background 0.2s ease !important;
         box-shadow: 0 2px 5px rgba(0,0,0,0.15) !important;
+        text-align: center;
     }
     .dugme-vrh:hover {
         background-color: #208b80 !important;
     }
     </style>
 """, unsafe_allow_html=True)
+
+# --- 1. POSTAVLJAMO SIDRO NA SAM VRH STRANICE ---
+st.markdown('<div id="vrh-stranice"></div>', unsafe_allow_html=True)
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
@@ -621,23 +633,13 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
 
-            # --- JEDNOSTAVNO HTML/JS DUGME ZA POVRATAK NA VRH ---
+            # --- 2. DODAJEMO ČISTU I BEZBEDNU HTML SIDRO VEZU (DUGME ZA VRH) ---
             st.markdown(
                 """
                 <div class="dugme-vrh-kontejner">
-                    <button class="dugme-vrh" onclick="
-                        (function() {
-                            const glavno = window.parent.document.querySelector('section.main') || 
-                                           window.parent.document.querySelector('.main') || 
-                                           window.parent.document.querySelector('[data-testid=\\'stMain\\']') ||
-                                           document.querySelector('section.main');
-                            if (glavno) {
-                                glavno.scrollTo({ top: 0, behavior: 'smooth' });
-                            } else {
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }
-                        })();
-                    ">⬆️ Idi na vrh stranice</button>
+                    <a href="#vrh-stranice" target="_self" class="dugme-vrh-link">
+                        <button class="dugme-vrh">⬆️ Idi na vrh stranice</button>
+                    </a>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -656,7 +658,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", 
                          "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
         
-        st.write("### 📝 Popunite podatke za novi izlaz")
+        st.write("### 📝 Popunite podatke for novi izlaz")
         col1, col2 = st.columns(2)
         
         with col1:
