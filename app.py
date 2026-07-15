@@ -196,6 +196,28 @@ st.markdown("""
         margin-top: -8px;
         margin-bottom: 12px;
     }
+
+    /* Stilizacija dugmeta za povratak na vrh */
+    .dugme-vrh-kontejner {
+        display: flex;
+        justify-content: center;
+        margin: 30px 0 10px 0;
+    }
+    .dugme-vrh {
+        background-color: #26a69a !important;
+        color: white !important;
+        border: none !important;
+        padding: 10px 24px !important;
+        font-size: 0.95rem !important;
+        font-weight: bold !important;
+        border-radius: 4px !important;
+        cursor: pointer !important;
+        transition: background 0.2s ease !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.15) !important;
+    }
+    .dugme-vrh:hover {
+        background-color: #208b80 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -216,9 +238,6 @@ if "prethodna_sezona" not in st.session_state:
 
 if "prethodni_meni" not in st.session_state:
     st.session_state["prethodni_meni"] = meni
-
-if "treba_skrol" not in st.session_state:
-    st.session_state["treba_skrol"] = False
 
 if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session_state["prethodni_meni"]:
     st.session_state["trenutna_stranica"] = 1
@@ -442,7 +461,7 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
-            # --- GORNJA NAVIGACIJA ---
+            # --- JEDINA NAVIGACIJA (SAMO GORE) ---
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
                 
@@ -451,14 +470,12 @@ elif meni == "Trenutno stanje":
                     prethodna_onemogucena = st.session_state["trenutna_stranica"] == 1
                     if st.button("⬅️ Prethodna", key="prev_gore", disabled=prethodna_onemogucena):
                         st.session_state["trenutna_stranica"] -= 1
-                        st.session_state["treba_skrol"] = True
                         st.rerun()
                 with col_nav2:
                     sve_stranice = list(range(1, broj_stranica + 1))
                     
                     def promena_stranice_gore():
                         st.session_state["trenutna_stranica"] = st.session_state["izbor_str_gore"]
-                        st.session_state["treba_skrol"] = True
 
                     st.selectbox(
                         "Idi na stranicu:", 
@@ -471,7 +488,6 @@ elif meni == "Trenutno stanje":
                     sledec_onemogucena = st.session_state["trenutna_stranica"] == broj_stranica
                     if st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena):
                         st.session_state["trenutna_stranica"] += 1
-                        st.session_state["treba_skrol"] = True
                         st.rerun()
                 st.markdown("---")
             
@@ -605,37 +621,27 @@ elif meni == "Trenutno stanje":
                                     st.rerun()
                 st.markdown("---")
 
-            # --- DONJA NAVIGACIJA NA KRAJU STRANICE ---
-            if broj_stranica > 1:
-                st.write("")
-                col_nav_d1, col_nav_d2, col_nav_d3 = st.columns([1, 2, 1])
-                with col_nav_d1:
-                    prethodna_onemogucena_d = st.session_state["trenutna_stranica"] == 1
-                    if st.button("⬅️ Prethodna", key="prev_dole", disabled=prethodna_onemogucena_d):
-                        st.session_state["trenutna_stranica"] -= 1
-                        st.session_state["treba_skrol"] = True
-                        st.rerun()
-                with col_nav_d2:
-                    sve_stranice_d = list(range(1, broj_stranica + 1))
-                    
-                    def promena_stranice_dole():
-                        st.session_state["trenutna_stranica"] = st.session_state["izbor_str_dole"]
-                        st.session_state["treba_skrol"] = True
-
-                    st.selectbox(
-                        "Idi na stranicu (dno):", 
-                        sve_stranice_d, 
-                        index=sve_stranice_d.index(st.session_state["trenutna_stranica"]),
-                        key="izbor_str_dole",
-                        on_change=promena_stranice_dole
-                    )
-                with col_nav_d3:
-                    sledec_onemogucena_d = st.session_state["trenutna_stranica"] == broj_stranica
-                    if st.button("Sledeća ➡️", key="next_dole", disabled=sledec_onemogucena_d):
-                        st.session_state["trenutna_stranica"] += 1
-                        st.session_state["treba_skrol"] = True
-                        st.rerun()
-                st.markdown("---")
+            # --- JEDNOSTAVNO HTML/JS DUGME ZA POVRATAK NA VRH ---
+            st.markdown(
+                """
+                <div class="dugme-vrh-kontejner">
+                    <button class="dugme-vrh" onclick="
+                        (function() {
+                            const glavno = window.parent.document.querySelector('section.main') || 
+                                           window.parent.document.querySelector('.main') || 
+                                           window.parent.document.querySelector('[data-testid=\\'stMain\\']') ||
+                                           document.querySelector('section.main');
+                            if (glavno) {
+                                glavno.scrollTo({ top: 0, behavior: 'smooth' });
+                            } else {
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }
+                        })();
+                    ">⬆️ Idi na vrh stranice</button>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
 
 # --- OPCIJA 3: EVIDENCIJA IZLAZA ---
@@ -806,28 +812,3 @@ elif meni == "Evidencija izlaza (Po danima)":
                     st.rerun()
     except Exception as storno_err:
         st.error(f"Greška u storno modulu: {storno_err}")
-
-# --- AUTOMATSKO SKROLOVANJE NA VRH ---
-# Pouzdani trik sa 'onerror' nad nepostojećom slikom radi direktnog izvršavanja u glavnom prozoru (zaobilazi iframe)
-if st.session_state["treba_skrol"]:
-    st.markdown(
-        """
-        <img src="nepostoji" onerror="
-            (function() {
-                const glavno = window.parent.document.querySelector('section.main') || 
-                               window.parent.document.querySelector('.main') || 
-                               window.parent.document.querySelector('[data-testid=\\'stMain\\']') ||
-                               document.querySelector('section.main') || 
-                               document.querySelector('[data-testid=\\'stMain\\']');
-                if (glavno) {
-                    glavno.scrollTo({ top: 0, behavior: 'auto' });
-                } else {
-                    window.scrollTo(0, 0);
-                }
-            })();
-        " style="display:none;">
-        """,
-        unsafe_allow_html=True
-    )
-    # Resetujemo stanje skrola na False da ne bi skrolovalo pri drugim klikovima (npr. otvaranje ekspandera)
-    st.session_state["treba_skrol"] = False
