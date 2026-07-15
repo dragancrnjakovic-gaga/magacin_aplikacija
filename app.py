@@ -377,7 +377,8 @@ if meni == "Unos nove robe":
     with col_nova_boja:
         nova_boja_unos = st.text_input("Unesi naziv nove boje:", "").strip().capitalize()
     with col_dugme_boja:
-        st.write(""); st.write("")
+        st.write("")
+        st.write("")
         if st.button("➕ Dodaj boju u listu"):
             if nova_boja_unos != "":
                 try:
@@ -393,7 +394,7 @@ if meni == "Unos nove robe":
                     st.warning("Boja već postoji u listi.")
 
 
-# --- OPCIJA 2: TRENUTNO STANJE ---
+# --- OPCIJA 2: TRENUTNO STANJE (SA SINHRONIZOVANOM PAGINACIJOM) ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
@@ -424,6 +425,7 @@ elif meni == "Trenutno stanje":
         st.markdown("---")
         
         pretraga = st.text_input("🔍 Pretraži ovu sekciju po šifri modela (Pretražuje sve stranice):", "").strip().upper()
+        
         if pretraga:
             df_prikaz = df[df["sifra"].str.contains(pretraga, na=False)]
         else:
@@ -436,45 +438,56 @@ elif meni == "Trenutno stanje":
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
+            # Ako je pokrenuta pretraga, ili je trenutna stranica van opsega novog filtriranja, vrati na prvu stranicu
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
             
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
+            # --- DEFINISANJE CALLBACK FUNKCIJA ZA PAGINACIJU ---
+            def klik_prethodna():
+                if st.session_state["trenutna_stranica"] > 1:
+                    st.session_state["trenutna_stranica"] -= 1
+                    st.session_state["treba_skrol"] = True
+
+            def klik_sledeca():
+                if st.session_state["trenutna_stranica"] < broj_stranica:
+                    st.session_state["trenutna_stranica"] += 1
+                    st.session_state["treba_skrol"] = True
+
+            def promena_selektora_gore():
+                st.session_state["trenutna_stranica"] = st.session_state["odabir_str_gore"]
+                st.session_state["treba_skrol"] = True
+
+            def promena_selektora_dole():
+                st.session_state["trenutna_stranica"] = st.session_state["odabir_str_dole"]
+                st.session_state["treba_skrol"] = True
+
             # --- GORNJA NAVIGACIJA ---
-            if broj_stranica > 1:
+            if broj_stranica > 1 and not pretraga:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
                 
                 col_nav1, col_nav2, col_nav3 = st.columns([1, 2, 1])
                 with col_nav1:
                     prethodna_onemogucena = st.session_state["trenutna_stranica"] == 1
-                    if st.button("⬅️ Prethodna", key="prev_gore", disabled=prethodna_onemogucena):
-                        st.session_state["trenutna_stranica"] -= 1
-                        st.session_state["treba_skrol"] = True
-                        st.rerun()
+                    st.button("⬅️ Prethodna", key="prev_gore", disabled=prethodna_onemogucena, on_click=klik_prethodna)
                 with col_nav2:
                     sve_stranice = list(range(1, broj_stranica + 1))
-                    
-                    def promena_stranice_gore():
-                        st.session_state["trenutna_stranica"] = st.session_state["izbor_str_gore"]
-                        st.session_state["treba_skrol"] = True
-
+                    # Koristimo privremeni ključ "odabir_str_gore" za selektor koji u on_change ažurira glavni ključ "trenutna_stranica"
                     st.selectbox(
                         "Idi na stranicu:", 
                         sve_stranice, 
-                        index=sve_stranice.index(st.session_state["trenutna_stranica"]),
-                        key="izbor_str_gore",
-                        on_change=promena_stranice_gore
+                        index=st.session_state["trenutna_stranica"] - 1,
+                        key="odabir_str_gore",
+                        on_change=promena_selektora_gore
                     )
                 with col_nav3:
                     sledec_onemogucena = st.session_state["trenutna_stranica"] == broj_stranica
-                    if st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena):
-                        st.session_state["trenutna_stranica"] += 1
-                        st.session_state["treba_skrol"] = True
-                        st.rerun()
+                    st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena, on_click=klik_sledeca)
                 st.markdown("---")
             
+            # Kalkulacija indeksa za prikaz artikala na trenutnoj stranici
             start_indeks = (st.session_state["trenutna_stranica"] - 1) * BROJ_ARTIKALA_PO_STRANICI
             kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
             df_za_prikaz = df_prikaz.iloc[start_indeks:kraj_indeks]
@@ -527,7 +540,6 @@ elif meni == "Trenutno stanje":
                             
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
-                        
                         st.markdown(
                             f'<div class="podsetnik-unosa">📆 Uneto: {datum_unosa_ispis} | 📦 Početno ušlo: {pocetni_pari} {sufiks_jedinica} ({pocetni_broj_kutija} {sufiks_kartona})</div>', 
                             unsafe_allow_html=True
@@ -606,35 +618,25 @@ elif meni == "Trenutno stanje":
                 st.markdown("---")
 
             # --- DONJA NAVIGACIJA NA KRAJU STRANICE ---
-            if broj_stranica > 1:
+            if broj_stranica > 1 and not pretraga:
                 st.write("")
                 col_nav_d1, col_nav_d2, col_nav_d3 = st.columns([1, 2, 1])
                 with col_nav_d1:
                     prethodna_onemogucena_d = st.session_state["trenutna_stranica"] == 1
-                    if st.button("⬅️ Prethodna", key="prev_dole", disabled=prethodna_onemogucena_d):
-                        st.session_state["trenutna_stranica"] -= 1
-                        st.session_state["treba_skrol"] = True
-                        st.rerun()
+                    st.button("⬅️ Prethodna", key="prev_dole", disabled=prethodna_onemogucena_d, on_click=klik_prethodna)
                 with col_nav_d2:
                     sve_stranice_d = list(range(1, broj_stranica + 1))
-                    
-                    def promena_stranice_dole():
-                        st.session_state["trenutna_stranica"] = st.session_state["izbor_str_dole"]
-                        st.session_state["treba_skrol"] = True
-
+                    # Koristimo privremeni ključ "odabir_str_dole" za donji selektor
                     st.selectbox(
                         "Idi na stranicu (dno):", 
                         sve_stranice_d, 
-                        index=sve_stranice_d.index(st.session_state["trenutna_stranica"]),
-                        key="izbor_str_dole",
-                        on_change=promena_stranice_dole
+                        index=st.session_state["trenutna_stranica"] - 1,
+                        key="odabir_str_dole",
+                        on_change=promena_selektora_dole
                     )
                 with col_nav_d3:
                     sledec_onemogucena_d = st.session_state["trenutna_stranica"] == broj_stranica
-                    if st.button("Sledeća ➡️", key="next_dole", disabled=sledec_onemogucena_d):
-                        st.session_state["trenutna_stranica"] += 1
-                        st.session_state["treba_skrol"] = True
-                        st.rerun()
+                    st.button("Sledeća ➡️", key="next_dole", disabled=sledec_onemogucena_d, on_click=klik_sledeca)
                 st.markdown("---")
 
 
@@ -807,7 +809,6 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.error(f"Greška u storno modulu: {storno_err}")
 
 # --- AUTOMATSKO SKROLOVANJE NA VRH ---
-# Proveravamo Session State na samom dnu aplikacije (izvršava se odmah nakon ponovnog učitavanja)
 if st.session_state["treba_skrol"]:
     st.components.v1.html(
         """
@@ -821,5 +822,4 @@ if st.session_state["treba_skrol"]:
         height=0,
         width=0
     )
-    # Resetujemo stanje skrola na False da ne bi skrolovalo pri drugim klikovima (npr. otvaranje ekspandera)
     st.session_state["treba_skrol"] = False
