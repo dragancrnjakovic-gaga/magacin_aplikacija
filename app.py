@@ -212,6 +212,7 @@ st.sidebar.markdown("---")
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
+# Inicijalizacija trenutne stranice
 if "trenutna_stranica" not in st.session_state:
     st.session_state["trenutna_stranica"] = 1
 
@@ -231,6 +232,9 @@ if "reset_brojac" not in st.session_state:
 
 if "reset_izlaz_kolicina" not in st.session_state:
     st.session_state["reset_izlaz_kolicina"] = 0
+
+# Pomoćna promenljiva koja služi da signalizira JS skrol na vrh ekrana nakon renderovanja
+treba_skrol_na_vrh = False
 
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
@@ -449,6 +453,7 @@ elif meni == "Trenutno stanje":
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
+            # Resetujemo na prvu stranu ako je pretraga aktivna ili ako je trenutna stranica veća od mogućeg broja stranica
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
             
@@ -464,22 +469,29 @@ elif meni == "Trenutno stanje":
                     prethodna_onemogucena = st.session_state["trenutna_stranica"] == 1
                     if st.button("⬅️ Prethodna", key="prev_gore", disabled=prethodna_onemogucena):
                         st.session_state["trenutna_stranica"] -= 1
+                        treba_skrol_na_vrh = True
                         st.rerun()
                 with col_nav2:
                     sve_stranice = list(range(1, broj_stranica + 1))
-                    izabrana_str = st.selectbox(
+                    
+                    # Koristimo callbacks i "key" da ispravno sinhronizujemo padajući meni sa stanjem stranice
+                    def promena_stranice_gore():
+                        st.session_state["trenutna_stranica"] = st.session_state["izbor_str_gore"]
+                        global treba_skrol_na_vrh
+                        treba_skrol_na_vrh = True
+
+                    st.selectbox(
                         "Idi na stranicu:", 
                         sve_stranice, 
                         index=sve_stranice.index(st.session_state["trenutna_stranica"]),
-                        key="izbor_str_gore"
+                        key="izbor_str_gore",
+                        on_change=promena_stranice_gore
                     )
-                    if izabrana_str != st.session_state["trenutna_stranica"]:
-                        st.session_state["trenutna_stranica"] = izabrana_str
-                        st.rerun()
                 with col_nav3:
                     sledec_onemogucena = st.session_state["trenutna_stranica"] == broj_stranica
                     if st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena):
                         st.session_state["trenutna_stranica"] += 1
+                        treba_skrol_na_vrh = True
                         st.rerun()
                 st.markdown("---")
             
@@ -625,22 +637,29 @@ elif meni == "Trenutno stanje":
                     prethodna_onemogucena_d = st.session_state["trenutna_stranica"] == 1
                     if st.button("⬅️ Prethodna", key="prev_dole", disabled=prethodna_onemogucena_d):
                         st.session_state["trenutna_stranica"] -= 1
+                        treba_skrol_na_vrh = True
                         st.rerun()
                 with col_nav_d2:
                     sve_stranice_d = list(range(1, broj_stranica + 1))
-                    izabrana_str_d = st.selectbox(
+                    
+                    # Sinhronizacija donjeg selektora stranica
+                    def promena_stranice_dole():
+                        st.session_state["trenutna_stranica"] = st.session_state["izbor_str_dole"]
+                        global treba_skrol_na_vrh
+                        treba_skrol_na_vrh = True
+
+                    st.selectbox(
                         "Idi na stranicu (dno):", 
                         sve_stranice_d, 
                         index=sve_stranice_d.index(st.session_state["trenutna_stranica"]),
-                        key="izbor_str_dole"
+                        key="izbor_str_dole",
+                        on_change=promena_stranice_dole
                     )
-                    if izabrana_str_d != st.session_state["trenutna_stranica"]:
-                        st.session_state["trenutna_stranica"] = izabrana_str_d
-                        st.rerun()
                 with col_nav_d3:
                     sledec_onemogucena_d = st.session_state["trenutna_stranica"] == broj_stranica
                     if st.button("Sledeća ➡️", key="next_dole", disabled=sledec_onemogucena_d):
                         st.session_state["trenutna_stranica"] += 1
+                        treba_skrol_na_vrh = True
                         st.rerun()
                 st.markdown("---")
 
@@ -812,3 +831,20 @@ elif meni == "Evidencija izlaza (Po danima)":
                     st.rerun()
     except Exception as storno_err:
         st.error(f"Greška u storno modulu: {storno_err}")
+
+# --- AUTOMATSKO SKROLOVANJE NA VRH ---
+# Ako je pritisnuto dugme za prelazak na sledeću/prethodnu stranu ili promenjen selectbox,
+# ovaj JS kod se ubacuje na dno stranice i izvršava skrol na vrh ekrana u pretraživaču.
+if treba_skrol_na_vrh:
+    st.components.v1.html(
+        """
+        <script>
+            window.parent.document.querySelector('section.main').scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        </script>
+        """,
+        height=0,
+        width=0
+    )
