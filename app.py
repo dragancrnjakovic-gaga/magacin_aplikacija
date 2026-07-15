@@ -23,13 +23,11 @@ def inicijalizuj_bazu():
 def uzmi_vezu_sa_bazom():
     try:
         conn = inicijalizuj_bazu()
-        # Ako je veza zatvorena ili pukla u pozadini, osvežavamo je
         if conn.closed != 0:
             st.cache_resource.clear()
             conn = inicijalizuj_bazu()
         return conn
     except Exception:
-        # Tiho hvatamo "SSL SYSCALL / EOF" i OperationalError greške, čistimo kaš i vraćamo novu vezu
         st.cache_resource.clear()
         return inicijalizuj_bazu()
 
@@ -62,7 +60,6 @@ def kreiraj_tabele():
             )
         ''')
         
-        # Automatsko dodavanje novih kolona u bazu bez brisanja starih podataka
         try:
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS grad TEXT;")
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS prodajna_cena REAL;")
@@ -92,7 +89,6 @@ def kreiraj_tabele():
     except Exception:
         pass
 
-# Automatski kreiramo strukturu na internetu ako ne postoji
 kreiraj_tabele()
 
 # --- NAPREDNO I UBRZANO KEŠIRANJE PODATAKA ---
@@ -137,7 +133,6 @@ def konvertuj_u_excel(df):
         df.to_excel(writer, index=False, sheet_name='Magacin')
     return output.getvalue()
 
-# --- POMOĆNA FUNKCIJA PREPOZNAVANJA SLIKA ---
 def pronadji_sliku_u_df(df, sifra):
     if df.empty:
         return ""
@@ -195,8 +190,8 @@ st.markdown("""
     }
     
     .podsetnik-unosa {
-        font-size: 1.02rem !important;  /* Povećano za oko 20% radi bolje čitljivosti */
-        color: #000000;                /* Boja promenjena u crnu */
+        font-size: 1.02rem !important;
+        color: #000000;
         font-style: italic;
         margin-top: -8px;
         margin-bottom: 12px;
@@ -212,7 +207,7 @@ st.sidebar.markdown("---")
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
-# Inicijalizacija trenutne stranice
+# --- INICIJALIZACIJA STANJA ---
 if "trenutna_stranica" not in st.session_state:
     st.session_state["trenutna_stranica"] = 1
 
@@ -221,6 +216,9 @@ if "prethodna_sezona" not in st.session_state:
 
 if "prethodni_meni" not in st.session_state:
     st.session_state["prethodni_meni"] = meni
+
+if "treba_skrol" not in st.session_state:
+    st.session_state["treba_skrol"] = False
 
 if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session_state["prethodni_meni"]:
     st.session_state["trenutna_stranica"] = 1
@@ -233,16 +231,12 @@ if "reset_brojac" not in st.session_state:
 if "reset_izlaz_kolicina" not in st.session_state:
     st.session_state["reset_izlaz_kolicina"] = 0
 
-# Pomoćna promenljiva koja služi da signalizira JS skrol na vrh ekrana nakon renderovanja
-treba_skrol_na_vrh = False
-
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
 if meni == "Unos nove robe":
     st.header(f"➕ Unos novog artikla ({izabrana_sezona})")
     lista_boja = ucitaj_boje()
     
-    # 1. POLJE ZA IZBOR DATUMA NA PRVOM MESTU
     datum_unosa_odabir = st.date_input("📆 Izaberi datum unosa robe:", datetime.now())
     st.markdown("---")
     
@@ -318,7 +312,6 @@ if meni == "Unos nove robe":
 
     st.markdown("---")
     
-    # 2. TABELA UNETIH ARTIKALA SORTIRANA DA NAJNOVIJI BUDU NA VRHU SA FILTEROM DATUMA ZA EXCEL
     st.subheader(f"📋 Pregled unete robe ({izabrana_sezona})")
     df_unos_pregled = ucitaj_artikle_za_sezonu(izabrana_sezona)
     
@@ -326,8 +319,6 @@ if meni == "Unos nove robe":
         st.info("Još uvek nema unetih artikala u ovoj sekciji.")
     else:
         df_prikaz_unos = df_unos_pregled.copy()
-        
-        # Proračun kartona
         df_prikaz_unos["Ukupno kartona"] = (df_prikaz_unos["broj_pari"] / df_prikaz_unos["pari_u_kutiji"]).round(2)
         
         relabel_kom = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari"
@@ -342,15 +333,11 @@ if meni == "Unos nove robe":
         
         kolone_redosted = ["Datum unosa", "Šifra modela", "Boja proizvoda", relabel_kom, relabel_kut, relabel_karton, "Prodajna cena (RSD)", "Internet cena (RSD)"]
         df_prikaz_unos = df_prikaz_unos[[c for c in kolone_redosted if c in df_prikaz_unos.columns]]
-        
-        # Sortiranje na ekranu: Najnoviji na vrhu
         df_prikaz_unos = df_prikaz_unos.sort_values(by="Datum unosa", ascending=False, na_position="last")
         
-        # FILTER OPSEGA DATUMA ZA EXCEL IZVOZ
         st.write("#### 📆 Filter datuma za izvoz u Excel:")
         col_ex1, col_ex2 = st.columns(2)
         
-        # Pronalaženje minimalnog unetog datuma radi lakšeg pretraživanja
         minimalni_datum_baza = datetime.now()
         sve_unete_vrednosti_datuma = df_prikaz_unos["Datum unosa"].dropna()
         if not sve_unete_vrednosti_datuma.empty:
@@ -363,16 +350,12 @@ if meni == "Unos nove robe":
         with col_ex2:
             izvoz_do = st.date_input("Do datuma unosa:", datetime.now(), key="izvoz_datum_do")
             
-        # Filtriranje tabele na osnovu izabranog opsega
         od_str, do_str = izvoz_od.strftime("%Y-%m-%d"), izvoz_do.strftime("%Y-%m-%d")
-        
-        # Pravimo privremeni DataFrame za Excel koji sadrži samo filtrirane datume
         df_za_excel = df_prikaz_unos[
             (df_prikaz_unos["Datum unosa"] >= od_str) & 
             (df_prikaz_unos["Datum unosa"] <= do_str)
         ]
         
-        # Ako ima i starih artikala bez datuma (None/NaN) a korisnik želi da ih vidi/izveze, zadržavamo ih na dnu ako je izabran najstariji mogući datum
         staro_stanje_bez_datuma = df_prikaz_unos[df_prikaz_unos["Datum unosa"].isna()]
         if izvoz_od == minimalni_datum_baza and not staro_stanje_bez_datuma.empty:
             df_za_excel = pd.concat([df_za_excel, staro_stanje_bez_datuma], ignore_index=True)
@@ -453,7 +436,6 @@ elif meni == "Trenutno stanje":
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
-            # Resetujemo na prvu stranu ako je pretraga aktivna ili ako je trenutna stranica veća od mogućeg broja stranica
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
             
@@ -469,16 +451,14 @@ elif meni == "Trenutno stanje":
                     prethodna_onemogucena = st.session_state["trenutna_stranica"] == 1
                     if st.button("⬅️ Prethodna", key="prev_gore", disabled=prethodna_onemogucena):
                         st.session_state["trenutna_stranica"] -= 1
-                        treba_skrol_na_vrh = True
+                        st.session_state["treba_skrol"] = True
                         st.rerun()
                 with col_nav2:
                     sve_stranice = list(range(1, broj_stranica + 1))
                     
-                    # Koristimo callbacks i "key" da ispravno sinhronizujemo padajući meni sa stanjem stranice
                     def promena_stranice_gore():
                         st.session_state["trenutna_stranica"] = st.session_state["izbor_str_gore"]
-                        global treba_skrol_na_vrh
-                        treba_skrol_na_vrh = True
+                        st.session_state["treba_skrol"] = True
 
                     st.selectbox(
                         "Idi na stranicu:", 
@@ -491,7 +471,7 @@ elif meni == "Trenutno stanje":
                     sledec_onemogucena = st.session_state["trenutna_stranica"] == broj_stranica
                     if st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena):
                         st.session_state["trenutna_stranica"] += 1
-                        treba_skrol_na_vrh = True
+                        st.session_state["treba_skrol"] = True
                         st.rerun()
                 st.markdown("---")
             
@@ -499,8 +479,6 @@ elif meni == "Trenutno stanje":
             kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
             df_za_prikaz = df_prikaz.iloc[start_indeks:kraj_indeks]
             
-            # Da bismo na trenutnom stanju izračunali originalno unete kutije na osnovu istorije prodaje,
-            # povlačimo ukupnu količinu izlaza iz baze za prikazane artikle kako bismo rekonstruisali inicijalno stanje.
             try:
                 conn = uzmi_vezu_sa_bazom()
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -523,7 +501,6 @@ elif meni == "Trenutno stanje":
                 p_cena_int = int(row['prodajna_cena'])
                 i_cena_int = int(row['internet_cena'])
                 
-                # --- PRORAČUN POČETNO UNETIH KUTIJA (KARTONA) ---
                 trenutno_na_stanju = int(row["broj_pari"])
                 izaslo_iz_magacina = int(izlaz_mapa.get(kljuc_id, 0))
                 pocetni_pari = trenutno_na_stanju + izaslo_iz_magacina
@@ -551,7 +528,6 @@ elif meni == "Trenutno stanje":
                     with col_detalji:
                         st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
                         
-                        # ISPIS POČETNOG STANJA I DATUMA UNOSA
                         st.markdown(
                             f'<div class="podsetnik-unosa">📆 Uneto: {datum_unosa_ispis} | 📦 Početno ušlo: {pocetni_pari} {sufiks_jedinica} ({pocetni_broj_kutija} {sufiks_kartona})</div>', 
                             unsafe_allow_html=True
@@ -637,16 +613,14 @@ elif meni == "Trenutno stanje":
                     prethodna_onemogucena_d = st.session_state["trenutna_stranica"] == 1
                     if st.button("⬅️ Prethodna", key="prev_dole", disabled=prethodna_onemogucena_d):
                         st.session_state["trenutna_stranica"] -= 1
-                        treba_skrol_na_vrh = True
+                        st.session_state["treba_skrol"] = True
                         st.rerun()
                 with col_nav_d2:
                     sve_stranice_d = list(range(1, broj_stranica + 1))
                     
-                    # Sinhronizacija donjeg selektora stranica
                     def promena_stranice_dole():
                         st.session_state["trenutna_stranica"] = st.session_state["izbor_str_dole"]
-                        global treba_skrol_na_vrh
-                        treba_skrol_na_vrh = True
+                        st.session_state["treba_skrol"] = True
 
                     st.selectbox(
                         "Idi na stranicu (dno):", 
@@ -659,7 +633,7 @@ elif meni == "Trenutno stanje":
                     sledec_onemogucena_d = st.session_state["trenutna_stranica"] == broj_stranica
                     if st.button("Sledeća ➡️", key="next_dole", disabled=sledec_onemogucena_d):
                         st.session_state["trenutna_stranica"] += 1
-                        treba_skrol_na_vrh = True
+                        st.session_state["treba_skrol"] = True
                         st.rerun()
                 st.markdown("---")
 
@@ -833,9 +807,8 @@ elif meni == "Evidencija izlaza (Po danima)":
         st.error(f"Greška u storno modulu: {storno_err}")
 
 # --- AUTOMATSKO SKROLOVANJE NA VRH ---
-# Ako je pritisnuto dugme za prelazak na sledeću/prethodnu stranu ili promenjen selectbox,
-# ovaj JS kod se ubacuje na dno stranice i izvršava skrol na vrh ekrana u pretraživaču.
-if treba_skrol_na_vrh:
+# Proveravamo Session State na samom dnu aplikacije (izvršava se odmah nakon ponovnog učitavanja)
+if st.session_state["treba_skrol"]:
     st.components.v1.html(
         """
         <script>
@@ -848,3 +821,5 @@ if treba_skrol_na_vrh:
         height=0,
         width=0
     )
+    # Resetujemo stanje skrola na False da ne bi skrolovalo pri drugim klikovima (npr. otvaranje ekspandera)
+    st.session_state["treba_skrol"] = False
