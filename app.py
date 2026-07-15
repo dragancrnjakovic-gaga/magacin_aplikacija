@@ -201,24 +201,46 @@ st.markdown("""
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
+# --- GLOBALNA INICIJALIZACIJA STANJA ---
+if "trenutna_stranica" not in st.session_state:
+    st.session_state["trenutna_stranica"] = 1
+
+if "treba_skrol" not in st.session_state:
+    st.session_state["treba_skrol"] = False
+
+# --- POUZDANO SKROLOVANJE SA VREMENSKOM ODGDOM (100ms) ---
+if st.session_state["treba_skrol"]:
+    st.components.v1.html(
+        """
+        <script>
+            setTimeout(function() {
+                const doc = window.parent.document;
+                const mainSec = doc.querySelector('section.main') || doc.querySelector('.main') || doc.querySelector('[data-testid="stMain"]');
+                if (mainSec) {
+                    mainSec.scrollTo({
+                        top: 0,
+                        behavior: 'auto'
+                    });
+                }
+            }, 100);
+        </script>
+        """,
+        height=0,
+        width=0
+    )
+    st.session_state["treba_skrol"] = False
+
 izabrana_sezona = st.sidebar.radio("🌸 IZABERI KATEGORIJU / SEZONU:", ["Proleće-Leto", "Jesen-Zima", "Torbe"])
 st.sidebar.markdown("---")
 
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Po danima)"])
 st.sidebar.info(f"Trenutno radite u sekciji:\n**{izabrana_sezona}**")
 
-# --- INICIJALIZACIJA STANJA ---
-if "trenutna_stranica" not in st.session_state:
-    st.session_state["trenutna_stranica"] = 1
-
 if "prethodna_sezona" not in st.session_state:
     st.session_state["prethodna_sezona"] = izabrana_sezona
 
 if "prethodni_meni" not in st.session_state:
     st.session_state["prethodni_meni"] = meni
-
-if "treba_skrol" not in st.session_state:
-    st.session_state["treba_skrol"] = False
 
 if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session_state["prethodni_meni"]:
     st.session_state["trenutna_stranica"] = 1
@@ -286,7 +308,7 @@ if meni == "Unos nove robe":
                         slika, folder="magacin/", public_id=f"{sifra}_{boja}",
                         transformation=[{"width": 800, "crop": "limit"}, {"quality": "auto", "fetch_format": "auto"}]
                     )
-                    url_slike = rezultat_slike["secure_url"]
+                    url_slike = resultado_slike["secure_url"]
                 except Exception as e:
                     st.error(f"Greška pri slanju slike: {e}")
         else:
@@ -394,7 +416,7 @@ if meni == "Unos nove robe":
                     st.warning("Boja već postoji u listi.")
 
 
-# --- OPCIJA 2: TRENUTNO STANJE (SA SINHRONIZOVANOM PAGINACIJOM I BRZIM SKROLOVANJEM) ---
+# --- OPCIJA 2: TRENUTNO STANJE ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
@@ -438,14 +460,13 @@ elif meni == "Trenutno stanje":
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
-            # Ako je pokrenuta pretraga, ili je trenutna stranica van opsega novog filtriranja, vrati na prvu stranicu
             if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
             
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
-            # --- DEFINISANJE CALLBACK FUNKCIJA ZA PAGINACIJU (SA FORCE-RESET SKROLA) ---
+            # --- DEFINISANJE CALLBACK FUNKCIJA ZA NAVIGACIJU ---
             def klik_prethodna():
                 if st.session_state["trenutna_stranica"] > 1:
                     st.session_state["trenutna_stranica"] -= 1
@@ -463,22 +484,6 @@ elif meni == "Trenutno stanje":
             def promena_selektora_dole():
                 st.session_state["trenutna_stranica"] = st.session_state["odabir_str_dole"]
                 st.session_state["treba_skrol"] = True
-
-            # Okidač za skrolovanje na samom početku iscrtavanja rezultata
-            if st.session_state["treba_skrol"]:
-                st.components.v1.html(
-                    """
-                    <script>
-                        window.parent.document.querySelector('section.main').scrollTo({
-                            top: 0,
-                            behavior: 'auto'  // 'auto' radi instantno i odmah prebacuje na vrh
-                        });
-                    </script>
-                    """,
-                    height=0,
-                    width=0
-                )
-                st.session_state["treba_skrol"] = False
 
             # --- GORNJA NAVIGACIJA ---
             if broj_stranica > 1 and not pretraga:
@@ -502,7 +507,6 @@ elif meni == "Trenutno stanje":
                     st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena, on_click=klik_sledeca)
                 st.markdown("---")
             
-            # Kalkulacija indeksa za prikaz artikala na trenutnoj stranici
             start_indeks = (st.session_state["trenutna_stranica"] - 1) * BROJ_ARTIKALA_PO_STRANICI
             kraj_indeks = start_indeks + BROJ_ARTIKALA_PO_STRANICI
             df_za_prikaz = df_prikaz.iloc[start_indeks:kraj_indeks]
