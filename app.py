@@ -394,7 +394,7 @@ if meni == "Unos nove robe":
                     st.warning("Boja već postoji u listi.")
 
 
-# --- OPCIJA 2: TRENUTNO STANJE (SA SINHRONIZOVANOM PAGINACIJOM) ---
+# --- OPCIJA 2: TRENUTNO STANJE (SA SINHRONIZOVANOM PAGINACIJOM I BRZIM SKROLOVANJEM) ---
 elif meni == "Trenutno stanje":
     st.header(f"📋 Stanje robe - Sekcija: {izabrana_sezona}")
     lista_boja = ucitaj_boje()
@@ -445,7 +445,7 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
-            # --- DEFINISANJE CALLBACK FUNKCIJA ZA PAGINACIJU ---
+            # --- DEFINISANJE CALLBACK FUNKCIJA ZA PAGINACIJU (SA FORCE-RESET SKROLA) ---
             def klik_prethodna():
                 if st.session_state["trenutna_stranica"] > 1:
                     st.session_state["trenutna_stranica"] -= 1
@@ -464,6 +464,22 @@ elif meni == "Trenutno stanje":
                 st.session_state["trenutna_stranica"] = st.session_state["odabir_str_dole"]
                 st.session_state["treba_skrol"] = True
 
+            # Okidač za skrolovanje na samom početku iscrtavanja rezultata
+            if st.session_state["treba_skrol"]:
+                st.components.v1.html(
+                    """
+                    <script>
+                        window.parent.document.querySelector('section.main').scrollTo({
+                            top: 0,
+                            behavior: 'auto'  // 'auto' radi instantno i odmah prebacuje na vrh
+                        });
+                    </script>
+                    """,
+                    height=0,
+                    width=0
+                )
+                st.session_state["treba_skrol"] = False
+
             # --- GORNJA NAVIGACIJA ---
             if broj_stranica > 1 and not pretraga:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
@@ -474,7 +490,6 @@ elif meni == "Trenutno stanje":
                     st.button("⬅️ Prethodna", key="prev_gore", disabled=prethodna_onemogucena, on_click=klik_prethodna)
                 with col_nav2:
                     sve_stranice = list(range(1, broj_stranica + 1))
-                    # Koristimo privremeni ključ "odabir_str_gore" za selektor koji u on_change ažurira glavni ključ "trenutna_stranica"
                     st.selectbox(
                         "Idi na stranicu:", 
                         sve_stranice, 
@@ -626,7 +641,6 @@ elif meni == "Trenutno stanje":
                     st.button("⬅️ Prethodna", key="prev_dole", disabled=prethodna_onemogucena_d, on_click=klik_prethodna)
                 with col_nav_d2:
                     sve_stranice_d = list(range(1, broj_stranica + 1))
-                    # Koristimo privremeni ključ "odabir_str_dole" za donji selektor
                     st.selectbox(
                         "Idi na stranicu (dno):", 
                         sve_stranice_d, 
@@ -807,19 +821,3 @@ elif meni == "Evidencija izlaza (Po danima)":
                     st.rerun()
     except Exception as storno_err:
         st.error(f"Greška u storno modulu: {storno_err}")
-
-# --- AUTOMATSKO SKROLOVANJE NA VRH ---
-if st.session_state["treba_skrol"]:
-    st.components.v1.html(
-        """
-        <script>
-            window.parent.document.querySelector('section.main').scrollTo({
-                top: 0,
-                behavior: 'smooth'
-            });
-        </script>
-        """,
-        height=0,
-        width=0
-    )
-    st.session_state["treba_skrol"] = False
