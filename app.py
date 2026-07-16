@@ -195,7 +195,7 @@ st.markdown("""
     
     .podsetnik-unosa {
         font-size: 1.02rem !important;
-        color: #000000;
+        color: var(--text-color) !important;
         font-style: italic;
         margin-top: -8px;
         margin-bottom: 12px;
