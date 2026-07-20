@@ -32,10 +32,11 @@ def uzmi_vezu_sa_bazom():
         return inicijalizuj_bazu()
 
 def kreiraj_tabele():
+    conn = uzmi_vezu_sa_bazom()
     try:
-        conn = uzmi_vezu_sa_bazom()
         cursor = conn.cursor()
         
+        # 1. Kreiranje osnovnih tabela
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS artikli (
                 sifra TEXT,
@@ -49,7 +50,6 @@ def kreiraj_tabele():
                 PRIMARY KEY (sifra, boja)
             )
         ''')
-        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS izlaz_robe (
                 id SERIAL PRIMARY KEY,
@@ -59,7 +59,9 @@ def kreiraj_tabele():
                 kolicina_izlaz INTEGER
             )
         ''')
+        conn.commit() # Odmah snimamo osnovne tabele
         
+        # 2. Bezbedno dodavanje kolona u izlaz_robe
         try:
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS grad TEXT;")
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS prodajna_cena REAL;")
@@ -68,64 +70,83 @@ def kreiraj_tabele():
         except Exception:
             conn.rollback()
 
+        # 3. Bezbedno dodavanje kolone u artikli
         try:
             cursor.execute("ALTER TABLE artikli ADD COLUMN IF NOT EXISTS datum_unosa TEXT;")
             conn.commit()
         except Exception:
             conn.rollback()
         
+        # 4. Kreiranje šifrarnika boja
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS sifrarnik_boja (
                 boja TEXT PRIMARY KEY
             )
         ''')
+        conn.commit()
         
         cursor.execute("SELECT COUNT(*) FROM sifrarnik_boja")
         if cursor.fetchone()[0] == 0:
             pocetne_boje = [("Black",), ("Blue",), ("Red",), ("Gray",), ("White",), ("Beige",)]
             cursor.executemany("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", pocetne_boje)
+            conn.commit()
             
-        conn.commit()
     except Exception:
-        pass
+        conn.rollback() # Ako bilo šta krupno pukne, resetuj transakciju
 
+# Pokrećemo kreiranje tabela sa očišćenim transakcijama
 kreiraj_tabele()
 
 # --- NAPREDNO I UBRZANO KEŠIRANJE PODATAKA ---
 @st.cache_data(ttl=60)
 def ucitaj_artikle_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
-    df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
-    return df
+    try:
+        df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
+        return df
+    except Exception:
+        conn.rollback()
+        return pd.DataFrame()
 
 @st.cache_data(ttl=300)
 def ucitaj_boje():
     conn = uzmi_vezu_sa_bazom()
-    cursor = conn.cursor()
-    cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
-    boje = [red[0] for red in cursor.fetchall()]
-    return boje
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
+        boje = [red[0] for red in cursor.fetchall()]
+        return boje
+    except Exception:
+        conn.rollback() # ISPRAVLJENO: Ako je prethodna transakcija pukla, resetuj je i pokušaj ponovo
+        cursor = conn.cursor()
+        cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
+        boje = [red[0] for red in cursor.fetchall()]
+        return boje
 
 @st.cache_data(ttl=30)
 def ucitaj_istoriju_izlaza_za_sezonu(sezona):
     conn = uzmi_vezu_sa_bazom()
-    upit_istorija = '''
-        SELECT ir.id AS "ID Zapisa", 
-               ir.datum AS "Datum", 
-               ir.sifra_artikla AS "Šifra modela", 
-               ir.boja_artikla AS "Boja proizvoda", 
-               ir.grad AS "Grad", 
-               ir.kolicina_izlaz AS "Izašlo",
-               ir.prodajna_cena AS "Prodajna cena po paru", 
-               (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
-               ir.nabavna_cena AS "Nabavna cena po paru", 
-               (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
-        FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
-        WHERE a.sezona = %s 
-        ORDER BY ir.id DESC
-    '''
-    df = pd.read_sql_query(upit_istorija, conn, params=(sezona,))
-    return df
+    try:
+        upit_istorija = '''
+            SELECT ir.id AS "ID Zapisa", 
+                   ir.datum AS "Datum", 
+                   ir.sifra_artikla AS "Šifra modela", 
+                   ir.boja_artikla AS "Boja proizvoda", 
+                   ir.grad AS "Grad", 
+                   ir.kolicina_izlaz AS "Izašlo",
+                   ir.prodajna_cena AS "Prodajna cena po paru", 
+                   (ir.kolicina_izlaz * ir.prodajna_cena) AS "Ukupno prodajna",
+                   ir.nabavna_cena AS "Nabavna cena po paru", 
+                   (ir.kolicina_izlaz * ir.nabavna_cena) AS "Ukupno nabavna"
+            FROM izlaz_robe ir INNER JOIN artikli a ON ir.sifra_artikla = a.sifra AND ir.boja_artikla = a.boja
+            WHERE a.sezona = %s 
+            ORDER BY ir.id DESC
+        '''
+        df = pd.read_sql_query(upit_istorija, conn, params=(sezona,))
+        return df
+    except Exception:
+        conn.rollback()
+        return pd.DataFrame()
 
 def konvertuj_u_excel(df):
     output = io.BytesIO()
@@ -144,7 +165,6 @@ def pronadji_sliku_u_df(df, sifra):
 # --- IZGLED I STILIZACIJA APLIKACIJE ---
 st.set_page_config(page_title="Magacin", layout="wide")
 
-# Omogućavamo glatko skrolovanje kroz CSS i eliminišemo podvlačenje teksta na linku
 st.markdown("""
     <style>
     html {
@@ -196,12 +216,12 @@ st.markdown("""
     .podsetnik-unosa {
         font-size: 1.02rem !important;
         color: var(--text-color) !important;
+        opacity: 0.8;
         font-style: italic;
         margin-top: -8px;
         margin-bottom: 12px;
     }
 
-    /* Stilizacija dugmeta za povratak na vrh */
     .dugme-vrh-kontejner {
         display: flex;
         justify-content: center;
@@ -230,7 +250,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 1. POSTAVLJAMO SIDRO NA SAM VRH STRANICE ---
 st.markdown('<div id="vrh-stranice"></div>', unsafe_allow_html=True)
 
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
@@ -339,6 +358,7 @@ if meni == "Unos nove robe":
             st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}' sa datumom unosa {datum_unosa_odabir.strftime('%Y-%m-%d')}!")
             st.rerun()
         except psycopg2.IntegrityError:
+            conn.rollback()
             st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u ovoj sekciji!")
 
     st.markdown("---")
@@ -346,9 +366,7 @@ if meni == "Unos nove robe":
     st.subheader(f"📋 Pregled unete robe ({izabrana_sezona})")
     df_unos_pregled = ucitaj_artikle_za_sezonu(izabrana_sezona)
     
-    if df_unos_pregled.empty:
-        st.info("Još uvek nema unetih artikala u ovoj sekciji.")
-    else:
+    if not df_unos_pregled.empty:
         df_prikaz_unos = df_unos_pregled.copy()
         df_prikaz_unos["Ukupno kartona"] = (df_prikaz_unos["broj_pari"] / df_prikaz_unos["pari_u_kutiji"]).round(2)
         
@@ -399,8 +417,9 @@ if meni == "Unos nove robe":
             file_name=f"uneseni_artikli_{izabrana_sezona}_od_{od_str}_do_{do_str}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        
         st.dataframe(df_prikaz_unos, use_container_width=True)
+    else:
+        st.info("Još uvek nema unetih artikala u ovoj sekciji.")
 
     st.markdown("---")
     st.subheader("🎨 Upravljanje listom boja")
@@ -421,6 +440,7 @@ if meni == "Unos nove robe":
                     st.success(f"Boja '{nova_boja_unos}' je dodata!")
                     st.rerun()
                 except psycopg2.IntegrityError:
+                    conn.rollback()
                     st.warning("Boja već postoji u listi.")
 
 
@@ -473,7 +493,7 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1 and not pretraga:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
-            # --- JEDINA NAVIGACIJA (SAMO GORE) ---
+            # --- NAVIGACIJA (GORE) ---
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
                 
@@ -513,6 +533,7 @@ elif meni == "Trenutno stanje":
                 cursor.execute("SELECT sifra_artikla, boja_artikla, SUM(kolicina_izlaz) as ukupno_izaslo FROM izlaz_robe GROUP BY sifra_artikla, boja_artikla")
                 izlaz_mapa = {f"{red['sifra_artikla']}_{red['boja_artikla']}": red['ukupno_izaslo'] for red in cursor.fetchall()}
             except Exception:
+                conn.rollback()
                 izlaz_mapa = {}
             
             for index, row in df_za_prikaz.iterrows():
@@ -577,7 +598,7 @@ elif meni == "Trenutno stanje":
                         with ekspander:
                             st.write("**Uredi podatke:**")
                             nova_sifra_izmena = st.text_input("Izmeni šifru modela:", value=sif, key=f"sifra_izm_{kljuc_id}").strip().upper()
-                            indeks_trenutne_boje = lista_boja.index(boj) if boj in lista_boja else 0
+                            indeks_trenutne_boje = lista_boja.index(boj) if lista_boja and boj in lista_boja else 0
                             nova_boja_izmena = st.selectbox("Izmeni boju artikla:", lista_boja, index=indeks_trenutne_boje, key=f"boja_{kljuc_id}")
                             
                             labela_izmena_kol = "Novo ukupno komada:" if izabrana_sezona == "Torbe" else "Novo ukupno pari:"
@@ -619,21 +640,25 @@ elif meni == "Trenutno stanje":
                                             st.success("Izmene uspešno sačuvane!")
                                             st.rerun()
                                         except psycopg2.IntegrityError:
+                                            conn.rollback()
                                             st.error(f"Greška: Šifra '{nova_sifra_izmena}' u boji '{nova_boja_izmena}' već postoji!")
                                         
                             with col_b2:
                                 if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
-                                    conn = uzmi_vezu_sa_bazom()
-                                    cursor = conn.cursor()
-                                    cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
-                                    conn.commit()
-                                    
-                                    ucitaj_artikle_za_sezonu.clear()
-                                    st.warning("Obrisano!")
-                                    st.rerun()
+                                    try:
+                                        conn = uzmi_vezu_sa_bazom()
+                                        cursor = conn.cursor()
+                                        cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
+                                        conn.commit()
+                                        
+                                        ucitaj_artikle_za_sezonu.clear()
+                                        st.warning("Obrisano!")
+                                        st.rerun()
+                                    except Exception:
+                                        conn.rollback()
                 st.markdown("---")
 
-            # --- 2. DODAJEMO ČISTU I BEZBEDNU HTML SIDRO VEZU (DUGME ZA VRH) ---
+            # --- DUGME ZA VRH ---
             st.markdown(
                 """
                 <div class="dugme-vrh-kontejner">
@@ -658,7 +683,7 @@ elif meni == "Evidencija izlaza (Po danima)":
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", 
                          "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
         
-        st.write("### 📝 Popunite podatke for novi izlaz")
+        st.write("### 📝 Popunite podatke za novi izlaz")
         col1, col2 = st.columns(2)
         
         with col1:
@@ -701,21 +726,25 @@ elif meni == "Evidencija izlaza (Po danima)":
             if zaliha_komada < kolicina_izlaza:
                 st.error(f"❌ Nema dovoljno robe! Na stanju ima samo {zaliha_komada} kom.")
             else:
-                conn = uzmi_vezu_sa_bazom()
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz, grad, prodajna_cena, nabavna_cena)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza, izabrani_grad, prodajna_cena_par, nabavna_cena_par))
-                cursor.execute('UPDATE artikli SET broj_pari = broj_pari - %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kolicina_izlaza, izabrana_sifra, izabrana_boja, izabrana_sezona))
-                
-                conn.commit()
-                st.session_state["reset_izlaz_kolicina"] += 1
-                
-                ucitaj_artikle_za_sezonu.clear()
-                ucitaj_istoriju_izlaza_za_sezonu.clear()
-                st.success("✅ Izlaz uspešno proknjižen!")
-                st.rerun()
+                try:
+                    conn = uzmi_vezu_sa_bazom()
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT INTO izlaz_robe (datum, sifra_artikla, boja_artikla, kolicina_izlaz, grad, prodajna_cena, nabavna_cena)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ''', (izabrani_datum.strftime("%Y-%m-%d"), izabrana_sifra, izabrana_boja, kolicina_izlaza, izabrani_grad, prodajna_cena_par, nabavna_cena_par))
+                    cursor.execute('UPDATE artikli SET broj_pari = broj_pari - %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kolicina_izlaza, izabrana_sifra, izabrana_boja, izabrana_sezona))
+                    
+                    conn.commit()
+                    st.session_state["reset_izlaz_kolicina"] += 1
+                    
+                    ucitaj_artikle_za_sezonu.clear()
+                    ucitaj_istoriju_izlaza_za_sezonu.clear()
+                    st.success("✅ Izlaz uspešno proknjižen!")
+                    st.rerun()
+                except Exception:
+                    conn.rollback()
+                    st.error("Greška pri upisu izlaza u bazu.")
 
     st.markdown("---")
     st.subheader(f"📋 Istorija dnevnih izlaza robe za sekciju: {izabrana_sezona}")
@@ -799,18 +828,23 @@ elif meni == "Evidencija izlaza (Po danima)":
                 st.error(f"Upozorenje: Brisanjem zapisa ID {id_zapis}, vraćate {kol_zapis} kom na stanje modela {sif_zapis}.")
                 
                 if st.button("❌ POTVRDI BRISANJE I VRATI ROBU NA STANJE", type="primary", key="potvrda_storniranja_ok"):
-                    conn = uzmi_vezu_sa_bazom()
-                    cursor = conn.cursor()
-                    cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_zapis,))
-                    
-                    cursor.execute("SELECT * FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif_zapis, boj_zapis, izabrana_sezona))
-                    if cursor.fetchone() is not None:
-                        cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
-                    
-                    conn.commit()
-                    ucitaj_artikle_za_sezonu.clear()
-                    ucitaj_istoriju_izlaza_za_sezonu.clear()
-                    st.success("Zapis uspešno storniran i obrisan!")
-                    st.rerun()
+                    try:
+                        conn = uzmi_vezu_sa_bazom()
+                        cursor = conn.cursor()
+                        cursor.execute("DELETE FROM izlaz_robe WHERE id = %s", (id_zapis,))
+                        
+                        cursor.execute("SELECT * FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif_zapis, boj_zapis, izabrana_sezona))
+                        if cursor.fetchone() is not None:
+                            cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, izabrana_sezona))
+                        
+                        conn.commit()
+                        ucitaj_artikle_za_sezonu.clear()
+                        ucitaj_istoriju_izlaza_za_sezonu.clear()
+                        st.success("Zapis uspešno storniran i obrisan!")
+                        st.rerun()
+                    except Exception:
+                        conn.rollback()
+                        st.error("Greška prilikom storniranja zapisa.")
     except Exception as storno_err:
+        conn.rollback()
         st.error(f"Greška u storno modulu: {storno_err}")
