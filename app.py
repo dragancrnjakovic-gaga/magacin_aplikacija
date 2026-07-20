@@ -21,19 +21,25 @@ def inicijalizuj_bazu():
     return psycopg2.connect(st.secrets["postgres"]["url"])
 
 def uzmi_vezu_sa_bazom():
+    """
+    Senior mehanizam: Proverava da li je konekcija živa brzim pingom baze.
+    Ako je pukla zbog mirovanja aplikacije, automatski otvara novu.
+    """
     try:
         conn = inicijalizuj_bazu()
-        if conn.closed != 0:
-            st.cache_resource.clear()
-            conn = inicijalizuj_bazu()
+        # Testiramo da li konekcija stvarno radi (ping baze)
+        with conn.cursor() as crsr:
+            crsr.execute("SELECT 1")
         return conn
     except Exception:
+        # Ako je konekcija "mrtva", čistimo keš i pravimo potpuno novu vezu
         st.cache_resource.clear()
         return inicijalizuj_bazu()
 
 def kreiraj_tabele():
-    conn = uzmi_vezu_sa_bazom()
+    """Bezbedno kreiranje tabela sa automatskim hvatanjem svih stanja."""
     try:
+        conn = uzmi_vezu_sa_bazom()
         cursor = conn.cursor()
         
         # 1. Kreiranje osnovnih tabela
@@ -59,7 +65,7 @@ def kreiraj_tabele():
                 kolicina_izlaz INTEGER
             )
         ''')
-        conn.commit() # Odmah snimamo osnovne tabele
+        conn.commit()
         
         # 2. Bezbedno dodavanje kolona u izlaz_robe
         try:
@@ -68,14 +74,16 @@ def kreiraj_tabele():
             cursor.execute("ALTER TABLE izlaz_robe ADD COLUMN IF NOT EXISTS nabavna_cena REAL;")
             conn.commit()
         except Exception:
-            conn.rollback()
+            try: conn.rollback()
+            except: pass
 
         # 3. Bezbedno dodavanje kolone u artikli
         try:
             cursor.execute("ALTER TABLE artikli ADD COLUMN IF NOT EXISTS datum_unosa TEXT;")
             conn.commit()
         except Exception:
-            conn.rollback()
+            try: conn.rollback()
+            except: pass
         
         # 4. Kreiranje šifrarnika boja
         cursor.execute('''
@@ -92,41 +100,51 @@ def kreiraj_tabele():
             conn.commit()
             
     except Exception:
-        conn.rollback() # Ako bilo šta krupno pukne, resetuj transakciju
+        try: conn.rollback()
+        except: pass
 
-# Pokrećemo kreiranje tabela sa očišćenim transakcijama
-kreiraj_tabele()
+# Pokrećemo inicijalnu proveru baze na startu aplikacije
+try:
+    kreiraj_tabele()
+except Exception:
+    pass
 
 # --- NAPREDNO I UBRZANO KEŠIRANJE PODATAKA ---
 @st.cache_data(ttl=60)
 def ucitaj_artikle_za_sezonu(sezona):
-    conn = uzmi_vezu_sa_bazom()
     try:
+        conn = uzmi_vezu_sa_bazom()
         df = pd.read_sql_query("SELECT * FROM artikli WHERE sezona = %s ORDER BY sifra ASC, boja ASC", conn, params=(sezona,))
         return df
     except Exception:
-        conn.rollback()
+        try: conn.rollback()
+        except: pass
         return pd.DataFrame()
 
 @st.cache_data(ttl=300)
 def ucitaj_boje():
-    conn = uzmi_vezu_sa_bazom()
     try:
+        conn = uzmi_vezu_sa_bazom()
         cursor = conn.cursor()
         cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
         boje = [red[0] for red in cursor.fetchall()]
         return boje
     except Exception:
-        conn.rollback() # ISPRAVLJENO: Ako je prethodna transakcija pukla, resetuj je i pokušaj ponovo
-        cursor = conn.cursor()
-        cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
-        boje = [red[0] for red in cursor.fetchall()]
-        return boje
+        try: conn.rollback()
+        except: pass
+        try:
+            conn = uzmi_vezu_sa_bazom()
+            cursor = conn.cursor()
+            cursor.execute("SELECT boja FROM sifrarnik_boja ORDER BY boja ASC")
+            boje = [red[0] for red in cursor.fetchall()]
+            return boje
+        except Exception:
+            return ["Black", "Blue", "Red", "Gray", "White", "Beige"]
 
 @st.cache_data(ttl=30)
 def ucitaj_istoriju_izlaza_za_sezonu(sezona):
-    conn = uzmi_vezu_sa_bazom()
     try:
+        conn = uzmi_vezu_sa_bazom()
         upit_istorija = '''
             SELECT ir.id AS "ID Zapisa", 
                    ir.datum AS "Datum", 
@@ -145,7 +163,8 @@ def ucitaj_istoriju_izlaza_za_sezonu(sezona):
         df = pd.read_sql_query(upit_istorija, conn, params=(sezona,))
         return df
     except Exception:
-        conn.rollback()
+        try: conn.rollback()
+        except: pass
         return pd.DataFrame()
 
 def konvertuj_u_excel(df):
@@ -358,8 +377,13 @@ if meni == "Unos nove robe":
             st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}' sa datumom unosa {datum_unosa_odabir.strftime('%Y-%m-%d')}!")
             st.rerun()
         except psycopg2.IntegrityError:
-            conn.rollback()
+            try: conn.rollback()
+            except: pass
             st.error(f"Greška: Model sa šifrom '{sifra}' u boji '{boja}' već postoji u ovoj sekciji!")
+        except Exception:
+            try: conn.rollback()
+            except: pass
+            st.error("Došlo je do greške sa bazom podataka. Pokušajte ponovo.")
 
     st.markdown("---")
     
@@ -440,8 +464,12 @@ if meni == "Unos nove robe":
                     st.success(f"Boja '{nova_boja_unos}' je dodata!")
                     st.rerun()
                 except psycopg2.IntegrityError:
-                    conn.rollback()
+                    try: conn.rollback()
+                    except: pass
                     st.warning("Boja već postoji u listi.")
+                except Exception:
+                    try: conn.rollback()
+                    except: pass
 
 
 # --- OPCIJA 2: TRENUTNO STANJE ---
@@ -533,7 +561,8 @@ elif meni == "Trenutno stanje":
                 cursor.execute("SELECT sifra_artikla, boja_artikla, SUM(kolicina_izlaz) as ukupno_izaslo FROM izlaz_robe GROUP BY sifra_artikla, boja_artikla")
                 izlaz_mapa = {f"{red['sifra_artikla']}_{red['boja_artikla']}": red['ukupno_izaslo'] for red in cursor.fetchall()}
             except Exception:
-                conn.rollback()
+                try: conn.rollback()
+                except: pass
                 izlaz_mapa = {}
             
             for index, row in df_za_prikaz.iterrows():
@@ -640,8 +669,12 @@ elif meni == "Trenutno stanje":
                                             st.success("Izmene uspešno sačuvane!")
                                             st.rerun()
                                         except psycopg2.IntegrityError:
-                                            conn.rollback()
+                                            try: conn.rollback()
+                                            except: pass
                                             st.error(f"Greška: Šifra '{nova_sifra_izmena}' u boji '{nova_boja_izmena}' već postoji!")
+                                        except Exception:
+                                            try: conn.rollback()
+                                            except: pass
                                         
                             with col_b2:
                                 if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
@@ -655,7 +688,8 @@ elif meni == "Trenutno stanje":
                                         st.warning("Obrisano!")
                                         st.rerun()
                                     except Exception:
-                                        conn.rollback()
+                                        try: conn.rollback()
+                                        except: pass
                 st.markdown("---")
 
             # --- DUGME ZA VRH ---
@@ -743,7 +777,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                     st.success("✅ Izlaz uspešno proknjižen!")
                     st.rerun()
                 except Exception:
-                    conn.rollback()
+                    try: conn.rollback()
+                    except: pass
                     st.error("Greška pri upisu izlaza u bazu.")
 
     st.markdown("---")
@@ -843,8 +878,8 @@ elif meni == "Evidencija izlaza (Po danima)":
                         st.success("Zapis uspešno storniran i obrisan!")
                         st.rerun()
                     except Exception:
-                        conn.rollback()
+                        try: conn.rollback()
+                        except: pass
                         st.error("Greška prilikom storniranja zapisa.")
     except Exception as storno_err:
-        conn.rollback()
         st.error(f"Greška u storno modulu: {storno_err}")
