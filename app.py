@@ -804,7 +804,16 @@ elif meni == "Evidencija izlaza (Po danima)":
                 df_filtrirano = df_filtrirano[df_filtrirano['Grad'] == izabrani_grad_filter]
             
             excel_izlazi = konvertuj_u_excel(df_filtrirano)
-            st.download_button(label="🟢 Preuzmi istoriju izlaza kao Excel", data=excel_izlazi, file_name=f"izlazi_{izabrana_sezona}_{datetime.now().strftime('%Y-%m-%d')}.xlsx")
+            
+            # ISPRAVLJENO: Dinamički naziv fajla koji uključuje izabranu sezonu, grad i raspon datuma
+            ime_fajla_excel = f"izlazi_{izabrana_sezona}_{izabrani_grad_filter}_{od_str}_do_{do_str}.xlsx"
+            
+            st.download_button(
+                label="🟢 Preuzmi istoriju izlaza kao Excel", 
+                data=excel_izlazi, 
+                file_name=ime_fajla_excel,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
             
             if not df_filtrirano.empty:
                 st.dataframe(df_filtrirano, use_container_width=True)
