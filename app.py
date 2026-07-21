@@ -790,9 +790,8 @@ elif meni == "Evidencija izlaza (Po danima)":
             lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
             col_filter1, col_filter2, col_filter3 = st.columns(3)
             
+            # ISPRAVLJENO: Podrazumevani početni datum je sada današnji datum umesto najstarijeg iz baze
             stari_datum = datetime.now()
-            try: stari_datum = datetime.strptime(df_izlazi['Datum'].min(), "%Y-%m-%d")
-            except: pass
                 
             with col_filter1: od_datuma = st.date_input("Od datuma:", stari_datum)
             with col_filter2: do_datuma = st.date_input("Do datuma:", datetime.now())
@@ -805,7 +804,6 @@ elif meni == "Evidencija izlaza (Po danima)":
             
             excel_izlazi = konvertuj_u_excel(df_filtrirano)
             
-            # ISPRAVLJENO: Dinamički naziv fajla koji uključuje izabranu sezonu, grad i raspon datuma
             ime_fajla_excel = f"izlazi_{izabrana_sezona}_{izabrani_grad_filter}_{od_str}_do_{do_str}.xlsx"
             
             st.download_button(
