@@ -307,10 +307,14 @@ if "prethodna_sezona" not in st.session_state:
 if "prethodni_meni" not in st.session_state:
     st.session_state["prethodni_meni"] = meni
 
+if "prethodna_pretraga" not in st.session_state:
+    st.session_state["prethodna_pretraga"] = ""
+
 if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session_state["prethodni_meni"]:
     st.session_state["trenutna_stranica"] = 1
     st.session_state["prethodna_sezona"] = izabrana_sezona
     st.session_state["prethodni_meni"] = meni
+    st.session_state["prethodna_pretraga"] = ""
 
 if "reset_brojac" not in st.session_state:
     st.session_state["reset_brojac"] = 0
@@ -522,6 +526,12 @@ elif meni == "Trenutno stanje":
         st.markdown("---")
         
         pretraga = st.text_input("🔍 Pretraži ovu sekciju po šifri modela (Pretražuje sve stranice):", "").strip().upper()
+        
+        # Resetujemo stranicu na 1 SAMO ako je promenjen tekst pretrage
+        if pretraga != st.session_state["prethodna_pretraga"]:
+            st.session_state["trenutna_stranica"] = 1
+            st.session_state["prethodna_pretraga"] = pretraga
+
         if pretraga:
             df_prikaz = df[df["sifra"].str.contains(pretraga, na=False)]
         else:
@@ -534,10 +544,10 @@ elif meni == "Trenutno stanje":
             ukupno_artikala = len(df_prikaz)
             broj_stranica = (ukupno_artikala // BROJ_ARTIKALA_PO_STRANICI) + (1 if ukupno_artikala % BROJ_ARTIKALA_PO_STRANICI > 0 else 0)
             
-            if pretraga != "" or st.session_state["trenutna_stranica"] > broj_stranica:
+            if st.session_state["trenutna_stranica"] > broj_stranica:
                 st.session_state["trenutna_stranica"] = 1
             
-            if broj_stranica > 1 and not pretraga:
+            if broj_stranica > 1:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
             # --- NAVIGACIJA (GORE) ---
