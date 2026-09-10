@@ -322,6 +322,9 @@ if "reset_brojac" not in st.session_state:
 if "reset_izlaz_kolicina" not in st.session_state:
     st.session_state["reset_izlaz_kolicina"] = 0
 
+if "reset_izlaz_nabavna" not in st.session_state:
+    st.session_state["reset_izlaz_nabavna"] = 0
+
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
 if meni == "Unos nove robe":
@@ -784,10 +787,12 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
             
         with col2:
             kljuc_kolicina_izlaza = f"kolicina_izlaz_{st.session_state['reset_izlaz_kolicina']}"
+            kljuc_nabavna_cena = f"nabavna_cena_{st.session_state['reset_izlaz_nabavna']}"
+            
             kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None, key=kljuc_kolicina_izlaza)
             
             prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=fabricka_cena)
-            nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None)
+            nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None, key=kljuc_nabavna_cena)
             
             tekst_zaliha = "komada" if artikal_sezona == "Torbe" else "pari"
             st.info(f"📊 Stanje u sekciji **{artikal_sezona}** za model **{prava_sifra} ({izabrana_boja})**: **{zaliha_komada} {tekst_zaliha}**")
@@ -812,6 +817,7 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
                     
                     conn.commit()
                     st.session_state["reset_izlaz_kolicina"] += 1
+                    st.session_state["reset_izlaz_nabavna"] += 1
                     
                     ucitaj_artikle_za_sezonu.clear()
                     ucitaj_sve_artikle.clear()
