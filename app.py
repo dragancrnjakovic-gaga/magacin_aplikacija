@@ -748,50 +748,97 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
     if df_svi_artikli.empty:
         st.info("💡 Trenutno nema nikakve robe na stanju u magacinu.")
     else:
-        # Priprema liste artikala sa naznakom sekcije
         df_svi_artikli["Sifra_Ispis"] = df_svi_artikli["sifra"] + " (" + df_svi_artikli["sezona"] + ")"
         mapa_sifra_sezona = dict(zip(df_svi_artikli["Sifra_Ispis"], df_svi_artikli["sifra"]))
         
         opcije_sifre = sorted(df_svi_artikli["Sifra_Ispis"].unique().tolist())
-        
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", 
                          "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
+
+        # --- FUNKCIJA ZA AUTOMATSKO PRERAČUNAVANJE CENE I DOKUMENTOVANJE SELEKCIJE ---
+        def azuriraj_cenu_izlaza():
+            if "jedinstveni_izlaz_sifra" in st.session_state and "jedinstveni_izlaz_boja" in st.session_state:
+                izab_sifra_label = st.session_state["jedinstveni_izlaz_sifra"]
+                izab_boja = st.session_state["jedinstveni_izlaz_boja"]
+                izab_grad = st.session_state.get("jedinstveni_izlaz_grad", lista_gradova[0])
+                
+                art_match = df_svi_artikli[(df_svi_artikli["Sifra_Ispis"] == izab_sifra_label) & (df_svi_artikli["boja"] == izab_boja)]
+                if not art_match.empty:
+                    if izab_grad == "Internet":
+                        st.session_state["izlaz_prodajna_cena_input"] = float(art_match.iloc[0]["internet_cena"])
+                    else:
+                        st.session_state["izlaz_prodajna_cena_input"] = float(art_match.iloc[0]["prodajna_cena"])
+
+        def pri_promeni_sifre():
+            if "jedinstveni_izlaz_sifra" in st.session_state:
+                izab_sifra_label = st.session_state["jedinstveni_izlaz_sifra"]
+                boje_za_sif = sorted(df_svi_artikli[df_svi_artikli["Sifra_Ispis"] == izab_sifra_label]["boja"].unique().tolist())
+                if boje_za_sif:
+                    st.session_state["jedinstveni_izlaz_boja"] = boje_za_sif[0]
+            azuriraj_cenu_izlaza()
+
+        # Inicijalna postavka u session_state ako prvi put učitavamo
+        if "jedinstveni_izlaz_sifra" not in st.session_state:
+            st.session_state["jedinstveni_izlaz_sifra"] = opcije_sifre[0]
         
+        prva_sifra_label = st.session_state["jedinstveni_izlaz_sifra"]
+        dostupne_boje = sorted(df_svi_artikli[df_svi_artikli["Sifra_Ispis"] == prva_sifra_label]["boja"].unique().tolist())
+        
+        if "jedinstveni_izlaz_boja" not in st.session_state or st.session_state["jedinstveni_izlaz_boja"] not in dostupne_boje:
+            st.session_state["jedinstveni_izlaz_boja"] = dostupne_boje[0] if dostupne_boje else ""
+
+        if "jedinstveni_izlaz_grad" not in st.session_state:
+            st.session_state["jedinstveni_izlaz_grad"] = lista_gradova[0]
+
+        if "izlaz_prodajna_cena_input" not in st.session_state:
+            azuriraj_cenu_izlaza()
+
         st.write("### 📝 Popunite podatke za novi izlaz")
         col1, col2 = st.columns(2)
         
         with col1:
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now())
-            izabrana_sifra_label = st.selectbox("Izaberi šifru modela:", opcije_sifre, key="jedinstveni_izlaz_sifra")
+            
+            izabrana_sifra_label = st.selectbox(
+                "Izaberi šifru modela:", 
+                opcije_sifre, 
+                key="jedinstveni_izlaz_sifra",
+                on_change=pri_promeni_sifre
+            )
             prava_sifra = mapa_sifra_sezona[izabrana_sifra_label]
             
             artikli_za_sifru = df_svi_artikli[df_svi_artikli["Sifra_Ispis"] == izabrana_sifra_label]
             boje_za_sifru = sorted(artikli_za_sifru["boja"].unique().tolist())
             
-            izabrana_boja = st.selectbox("Izaberi boju modela:", boje_za_sifru, key="jedinstveni_izlaz_boja")
-            izabrani_grad = st.selectbox("Izaberi grad:", lista_gradova)
+            izabrana_boja = st.selectbox(
+                "Izaberi boju modela:", 
+                boje_za_sifru, 
+                key="jedinstveni_izlaz_boja",
+                on_change=azuriraj_cenu_izlaza
+            )
+            
+            izabrani_grad = st.selectbox(
+                "Izaberi grad:", 
+                lista_gradova, 
+                key="jedinstveni_izlaz_grad",
+                on_change=azuriraj_cenu_izlaza
+            )
             
         filtriran_artikal = artikli_za_sifru[artikli_za_sifru["boja"] == izabrana_boja]
         
-        fabricka_cena = 0.0
         zaliha_komada = 0
         artikal_sezona = ""
-        
         if not filtriran_artikal.empty:
             artikal_sezona = filtriran_artikal.iloc[0]["sezona"]
             zaliha_komada = int(filtriran_artikal.iloc[0]["broj_pari"])
-            if izabrani_grad == "Internet":
-                fabricka_cena = float(filtriran_artikal.iloc[0]["internet_cena"])
-            else:
-                fabricka_cena = float(filtriran_artikal.iloc[0]["prodajna_cena"])
-            
+
         with col2:
             kljuc_kolicina_izlaza = f"kolicina_izlaz_{st.session_state['reset_izlaz_kolicina']}"
             kljuc_nabavna_cena = f"nabavna_cena_{st.session_state['reset_izlaz_nabavna']}"
             
             kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None, key=kljuc_kolicina_izlaza)
             
-            prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, value=fabricka_cena)
+            prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, key="izlaz_prodajna_cena_input")
             nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None, key=kljuc_nabavna_cena)
             
             tekst_zaliha = "komada" if artikal_sezona == "Torbe" else "pari"
