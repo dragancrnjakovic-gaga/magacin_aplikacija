@@ -7,6 +7,28 @@ import pandas as pd
 from datetime import datetime
 import io
 
+# --- DEFINICIJA GRUPA I PODGRUPA PO SEZONAMA ---
+STRUKTURA_GRUPA = {
+    "Jesen-Zima": {
+        "ŽENSKE ČIZME": ["Kratke ravne", "Kratke štikla", "Duge ravne", "UGG", "Martinke", "Snegarice", "Za babe", "Gumene"],
+        "ŽENSKE CIPELE": ["Salonke VTŠ", "Salonke STŠ", "Salonke MTŠ", "Salonke VDŠ", "Salonke SDŠ", "Salonke MDŠ", "Za starije žene", "Za babe", "Duboke", "Kanađanke"],
+        "ŽENSKE PATIKE": ["Plitke", "Duboke"],
+        "MUŠKE PATIKE": ["Plitke", "Duboke", "Kanađanke"],
+        "MUŠKE CIPELE": ["Plitke", "Duboke", "Kanađanke", "Za dede"],
+        "MUŠKE GUMENE ČIZME": ["Kratke", "Duboke"],
+        "DEČIJE PATIKE": ["Muške", "Ženske"],
+        "DEČIJE ČIZME": ["Gumene", "Kanađanke", "Martinke", "Snegarice", "Klasične"],
+        "KUĆNE PAPUČE": ["Muške", "Ženske"],
+        "KLOMPE": ["Niske", "Visoke", "Print", "U džaku", "Muške"]
+    },
+    "Proleće-Leto": {
+        "Osnovna grupa": ["Osnovna podgrupa"]
+    },
+    "Torbe": {
+        "Osnovna grupa": ["Osnovna podgrupa"]
+    }
+}
+
 # --- KONFIGURACIJA CLOUDINARY-JA ---
 cloudinary.config(
     cloud_name = st.secrets["cloudinary"]["cloud_name"],
@@ -21,10 +43,6 @@ def inicijalizuj_bazu():
     return psycopg2.connect(st.secrets["postgres"]["url"])
 
 def uzmi_vezu_sa_bazom():
-    """
-    Senior mehanizam: Proverava da li je konekcija živa brzim pingom baze.
-    Ako je pukla zbog mirovanja aplikacije, automatski otvara novu.
-    """
     try:
         conn = inicijalizuj_bazu()
         with conn.cursor() as crsr:
@@ -51,6 +69,8 @@ def kreiraj_tabele():
                 prodajna_cena REAL,
                 internet_cena REAL,
                 slika_putanja TEXT,
+                grupa TEXT,
+                podgrupa TEXT,
                 PRIMARY KEY (sifra, boja)
             )
         ''')
@@ -75,9 +95,11 @@ def kreiraj_tabele():
             try: conn.rollback()
             except: pass
 
-        # 3. Bezbedno dodavanje kolone u artikli
+        # 3. Bezbedno dodavanje kolona u artikli
         try:
             cursor.execute("ALTER TABLE artikli ADD COLUMN IF NOT EXISTS datum_unosa TEXT;")
+            cursor.execute("ALTER TABLE artikli ADD COLUMN IF NOT EXISTS grupa TEXT;")
+            cursor.execute("ALTER TABLE artikli ADD COLUMN IF NOT EXISTS podgrupa TEXT;")
             conn.commit()
         except Exception:
             try: conn.rollback()
@@ -101,13 +123,12 @@ def kreiraj_tabele():
         try: conn.rollback()
         except: pass
 
-# Pokrećemo inicijalnu proveru baze na startu aplikacije
 try:
     kreiraj_tabele()
 except Exception:
     pass
 
-# --- NAPREDNO I UBRZANO KEŠIRANJE PODATAKA ---
+# --- KEŠIRANJE PODATAKA ---
 @st.cache_data(ttl=60)
 def ucitaj_artikle_za_sezonu(sezona):
     try:
@@ -121,7 +142,6 @@ def ucitaj_artikle_za_sezonu(sezona):
 
 @st.cache_data(ttl=60)
 def ucitaj_sve_artikle():
-    """Učitava sve artikle iz svih sezona radi jedinstvenog izlaza."""
     try:
         conn = uzmi_vezu_sa_bazom()
         df = pd.read_sql_query("SELECT * FROM artikli ORDER BY sezona ASC, sifra ASC, boja ASC", conn)
@@ -153,7 +173,6 @@ def ucitaj_boje():
 
 @st.cache_data(ttl=30)
 def ucitaj_jedinstvenu_istoriju_izlaza():
-    """Učitava objedinjenu istoriju izlaza robe za SVE sekcije."""
     try:
         conn = uzmi_vezu_sa_bazom()
         upit_istorija = '''
@@ -199,13 +218,8 @@ st.set_page_config(page_title="Magacin", layout="wide")
 
 st.markdown("""
     <style>
-    html {
-        scroll-behavior: smooth !important;
-    }
-    .block-container {
-        padding-top: 3.5rem !important;
-        padding-bottom: 2rem !important;
-    }
+    html { scroll-behavior: smooth !important; }
+    .block-container { padding-top: 3.5rem !important; padding-bottom: 2rem !important; }
     h1 { font-size: 1.8rem !important; padding-bottom: 10px !important; margin: 0px !important; }
     h2 { font-size: 1.35rem !important; padding-bottom: 15px !important; margin: 0px !important; }
     h3 { font-size: 1.05rem !important; font-weight: bold !important; }
@@ -217,73 +231,32 @@ st.markdown("""
     
     div[data-testid="stHorizontalBlock"] { 
         background: var(--secondary-background-color);
-        padding: 15px; 
-        border-radius: 8px; 
-        margin-bottom: 12px; 
-        border: 1px solid var(--border-color);
+        padding: 15px; border-radius: 8px; margin-bottom: 12px; border: 1px solid var(--border-color);
     }
-    
     div.stButton > button, div[data-testid="stForm"] button {
-        width: 100% !important;
-        padding: 2px 10px !important;
-        font-size: 0.9rem !important;
-        height: 38px !important;
+        width: 100% !important; padding: 2px 10px !important; font-size: 0.9rem !important; height: 38px !important;
     }
-    
     .indikator-stranice {
-        background-color: var(--secondary-background-color);
-        padding: 6px 12px;
-        border-radius: 4px;
-        font-weight: bold;
-        color: #26a69a;
-        font-size: 0.95rem;
-        border-left: 4px solid #26a69a;
-        margin-bottom: 15px;
-        display: inline-block;
-        border-top: 1px solid var(--border-color);
-        border-right: 1px solid var(--border-color);
-        border-bottom: 1px solid var(--border-color);
+        background-color: var(--secondary-background-color); padding: 6px 12px; border-radius: 4px;
+        font-weight: bold; color: #26a69a; font-size: 0.95rem; border-left: 4px solid #26a69a;
+        margin-bottom: 15px; display: inline-block; border: 1px solid var(--border-color);
     }
-    
     .podsetnik-unosa {
-        font-size: 1.02rem !important;
-        color: var(--text-color) !important;
-        opacity: 0.8;
-        font-style: italic;
-        margin-top: -8px;
-        margin-bottom: 12px;
+        font-size: 1.02rem !important; color: var(--text-color) !important; opacity: 0.8;
+        font-style: italic; margin-top: -8px; margin-bottom: 12px;
     }
-
-    .dugme-vrh-kontejner {
-        display: flex;
-        justify-content: center;
-        margin: 30px 0 10px 0;
-    }
-    .dugme-vrh-link {
-        text-decoration: none !important;
-        display: inline-block;
-    }
+    .dugme-vrh-kontejner { display: flex; justify-content: center; margin: 30px 0 10px 0; }
+    .dugme-vrh-link { text-decoration: none !important; display: inline-block; }
     .dugme-vrh {
-        background-color: #26a69a !important;
-        color: white !important;
-        border: none !important;
-        padding: 12px 30px !important;
-        font-size: 0.95rem !important;
-        font-weight: bold !important;
-        border-radius: 4px !important;
-        cursor: pointer !important;
-        transition: background 0.2s ease !important;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.15) !important;
-        text-align: center;
+        background-color: #26a69a !important; color: white !important; border: none !important;
+        padding: 12px 30px !important; font-size: 0.95rem !important; font-weight: bold !important;
+        border-radius: 4px !important; cursor: pointer !important; box-shadow: 0 2px 5px rgba(0,0,0,0.15) !important;
     }
-    .dugme-vrh:hover {
-        background-color: #208b80 !important;
-    }
+    .dugme-vrh:hover { background-color: #208b80 !important; }
     </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div id="vrh-stranice"></div>', unsafe_allow_html=True)
-
 st.title("📦 Višekorisnički sistem za praćenje stanja u magacinu")
 
 meni = st.sidebar.selectbox("Izaberi opciju:", ["Trenutno stanje", "Unos nove robe", "Evidencija izlaza (Jedinstvena)"])
@@ -298,17 +271,10 @@ else:
     st.sidebar.info("Trenutno radite u:\n**Centralnoj evidenciji izlaza (Sve sekcije)**")
 
 # --- INICIJALIZACIJA STANJA ---
-if "trenutna_stranica" not in st.session_state:
-    st.session_state["trenutna_stranica"] = 1
-
-if "prethodna_sezona" not in st.session_state:
-    st.session_state["prethodna_sezona"] = izabrana_sezona
-
-if "prethodni_meni" not in st.session_state:
-    st.session_state["prethodni_meni"] = meni
-
-if "prethodna_pretraga" not in st.session_state:
-    st.session_state["prethodna_pretraga"] = ""
+if "trenutna_stranica" not in st.session_state: st.session_state["trenutna_stranica"] = 1
+if "prethodna_sezona" not in st.session_state: st.session_state["prethodna_sezona"] = izabrana_sezona
+if "prethodni_meni" not in st.session_state: st.session_state["prethodni_meni"] = meni
+if "prethodna_pretraga" not in st.session_state: st.session_state["prethodna_pretraga"] = ""
 
 if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session_state["prethodni_meni"]:
     st.session_state["trenutna_stranica"] = 1
@@ -316,14 +282,9 @@ if izabrana_sezona != st.session_state["prethodna_sezona"] or meni != st.session
     st.session_state["prethodni_meni"] = meni
     st.session_state["prethodna_pretraga"] = ""
 
-if "reset_brojac" not in st.session_state:
-    st.session_state["reset_brojac"] = 0
-
-if "reset_izlaz_kolicina" not in st.session_state:
-    st.session_state["reset_izlaz_kolicina"] = 0
-
-if "reset_izlaz_nabavna" not in st.session_state:
-    st.session_state["reset_izlaz_nabavna"] = 0
+if "reset_brojac" not in st.session_state: st.session_state["reset_brojac"] = 0
+if "reset_izlaz_kolicina" not in st.session_state: st.session_state["reset_izlaz_kolicina"] = 0
+if "reset_izlaz_nabavna" not in st.session_state: st.session_state["reset_izlaz_nabavna"] = 0
 
 
 # --- OPCIJA 1: UNOS NOVE ROBE ---
@@ -344,6 +305,13 @@ if meni == "Unos nove robe":
     
     col1, col2 = st.columns(2)
     with col1:
+        # Zavisni padajući meniji za Grupu i Podgrupu iznad šifre modela
+        dostupne_grupe = list(STRUKTURA_GRUPA.get(izabrana_sezona, {"Ostalo": ["Ostalo"]}).keys())
+        izabrana_grupa = st.selectbox("Grupa:", dostupne_grupe, key=f"unos_grupa_{st.session_state['reset_brojac']}")
+        
+        dostupne_podgrupe = STRUKTURA_GRUPA[izabrana_sezona].get(izabrana_grupa, ["Ostalo"])
+        izabrana_podgrupa = st.selectbox("Podgrupa:", dostupne_podgrupe, key=f"unos_podgrupa_{st.session_state['reset_brojac']}")
+        
         sifra = st.text_input("Šifra modela:", value=st.session_state["unos_sifra"]).strip().upper()
         boja = st.selectbox("Boja modela:", lista_boja, index=lista_boja.index(st.session_state["unos_boja"]) if st.session_state["unos_boja"] in lista_boja else 0)
         
@@ -390,9 +358,9 @@ if meni == "Unos nove robe":
             conn = uzmi_vezu_sa_bazom()
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja, datum_unosa)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike, datum_unosa_odabir.strftime("%Y-%m-%d")))
+                INSERT INTO artikli (sifra, boja, sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, slika_putanja, datum_unosa, grupa, podgrupa)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (sifra, boja, izabrana_sezona, broj_pari, pari_u_kutiji, prodajna_cena, internet_cena, url_slike, datum_unosa_odabir.strftime("%Y-%m-%d"), izabrana_grupa, izabrana_podgrupa))
             conn.commit()
             
             ucitaj_artikle_za_sezonu.clear()
@@ -400,7 +368,7 @@ if meni == "Unos nove robe":
             st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
             
-            st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}' sa datumom unosa {datum_unosa_odabir.strftime('%Y-%m-%d')}!")
+            st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}' (Grupa: {izabrana_grupa} -> {izabrana_podgrupa})!")
             st.rerun()
         except psycopg2.IntegrityError:
             try: conn.rollback()
@@ -425,12 +393,13 @@ if meni == "Unos nove robe":
         relabel_karton = "Ukupno pakovanja" if izabrana_sezona == "Torbe" else "Ukupno kartona"
         
         df_prikaz_unos = df_prikaz_unos.rename(columns={
-            "datum_unosa": "Datum unosa", "sifra": "Šifra modela", "boja": "Boja proizvoda", 
+            "datum_unosa": "Datum unosa", "grupa": "Grupa", "podgrupa": "Podgrupa",
+            "sifra": "Šifra modela", "boja": "Boja proizvoda", 
             "broj_pari": relabel_kom, "pari_u_kutiji": relabel_kut, "Ukupno kartona": relabel_karton,
             "prodajna_cena": "Prodajna cena (RSD)", "internet_cena": "Internet cena (RSD)"
         })
         
-        kolone_redosted = ["Datum unosa", "Šifra modela", "Boja proizvoda", relabel_kom, relabel_kut, relabel_karton, "Prodajna cena (RSD)", "Internet cena (RSD)"]
+        kolone_redosted = ["Datum unosa", "Grupa", "Podgrupa", "Šifra modela", "Boja proizvoda", relabel_kom, relabel_kut, relabel_karton, "Prodajna cena (RSD)", "Internet cena (RSD)"]
         df_prikaz_unos = df_prikaz_unos[[c for c in kolone_redosted if c in df_prikaz_unos.columns]]
         df_prikaz_unos = df_prikaz_unos.sort_values(by="Datum unosa", ascending=False, na_position="last")
         
@@ -485,7 +454,6 @@ if meni == "Unos nove robe":
                     cursor = conn.cursor()
                     cursor.execute("INSERT INTO sifrarnik_boja (boja) VALUES (%s)", (nova_boja_unos,))
                     conn.commit()
-                    
                     ucitaj_boje.clear()
                     st.success(f"Boja '{nova_boja_unos}' je dodata!")
                     st.rerun()
@@ -514,6 +482,7 @@ elif meni == "Trenutno stanje":
         relabel_kut = "Kutija/Pakovanja" if izabrana_sezona == "Torbe" else "Pari u kutiji"
         
         df_excel = df_excel.rename(columns={
+            "grupa": "Grupa", "podgrupa": "Podgrupa",
             "sifra": "Šifra modela", "boja": "Boja proizvoda", "sezona": "Kategorija", 
             "broj_pari": relabel_kom, "pari_u_kutiji": relabel_kut,
             "prodajna_cena": "Prodajna cena (RSD)", "internet_cena": "Internet cena (RSD)"
@@ -528,20 +497,32 @@ elif meni == "Trenutno stanje":
         )
         st.markdown("---")
         
-        pretraga = st.text_input("🔍 Pretraži ovu sekciju po šifri modela (Pretražuje sve stranice):", "").strip().upper()
+        # Filteri za grupu, podgrupu i pretragu
+        col_f1, col_f2, col_f3 = st.columns(3)
+        sve_grupe = df["grupa"].dropna().unique().tolist() if "grupa" in df.columns else []
+        sve_podgrupe = df["podgrupa"].dropna().unique().tolist() if "podgrupa" in df.columns else []
         
-        # Resetujemo stranicu na 1 SAMO ako je promenjen tekst pretrage
+        with col_f1:
+            filter_grupe = st.multiselect("Filtriraj po grupi:", sve_grupe)
+        with col_f2:
+            filter_podgrupe = st.multiselect("Filtriraj po podgrupi:", sve_podgrupe)
+        with col_f3:
+            pretraga = st.text_input("🔍 Pretraži po šifri modela:", "").strip().upper()
+        
         if pretraga != st.session_state["prethodna_pretraga"]:
             st.session_state["trenutna_stranica"] = 1
             st.session_state["prethodna_pretraga"] = pretraga
 
+        df_prikaz = df.copy()
+        if filter_grupe:
+            df_prikaz = df_prikaz[df_prikaz["grupa"].isin(filter_grupe)]
+        if filter_podgrupe:
+            df_prikaz = df_prikaz[df_prikaz["podgrupa"].isin(filter_podgrupe)]
         if pretraga:
-            df_prikaz = df[df["sifra"].str.contains(pretraga, na=False)]
-        else:
-            df_prikaz = df.copy()
+            df_prikaz = df_prikaz[df_prikaz["sifra"].str.contains(pretraga, na=False)]
         
         if df_prikaz.empty:
-            st.warning(f"Nema rezultata za šifru '{pretraga}'")
+            st.warning("Nema rezultata za izabrane filtere/šifru.")
         else:
             BROJ_ARTIKALA_PO_STRANICI = 20
             ukupno_artikala = len(df_prikaz)
@@ -553,7 +534,7 @@ elif meni == "Trenutno stanje":
             if broj_stranica > 1:
                 st.caption(f"Ukupno pronađeno: {ukupno_artikala} modela raspoređenih na {broj_stranica} stranica.")
             
-            # --- NAVIGACIJA (GORE) ---
+            # --- NAVIGACIJA ---
             if broj_stranica > 1:
                 st.markdown(f'<div class="indikator-stranice">📄 Stranica: {st.session_state["trenutna_stranica"]} od {broj_stranica}</div>', unsafe_allow_html=True)
                 
@@ -565,17 +546,9 @@ elif meni == "Trenutno stanje":
                         st.rerun()
                 with col_nav2:
                     sve_stranice = list(range(1, broj_stranica + 1))
-                    
                     def promena_stranice_gore():
                         st.session_state["trenutna_stranica"] = st.session_state["izbor_str_gore"]
-
-                    st.selectbox(
-                        "Idi na stranicu:", 
-                        sve_stranice, 
-                        index=sve_stranice.index(st.session_state["trenutna_stranica"]),
-                        key="izbor_str_gore",
-                        on_change=promena_stranice_gore
-                    )
+                    st.selectbox("Idi na stranicu:", sve_stranice, index=sve_stranice.index(st.session_state["trenutna_stranica"]), key="izbor_str_gore", on_change=promena_stranice_gore)
                 with col_nav3:
                     sledec_onemogucena = st.session_state["trenutna_stranica"] == broj_stranica
                     if st.button("Sledeća ➡️", key="next_gore", disabled=sledec_onemogucena):
@@ -621,8 +594,8 @@ elif meni == "Trenutno stanje":
                 if not datum_unosa_ispis or pd.isna(datum_unosa_ispis):
                     datum_unosa_ispis = "Nepoznat datum"
                 
-                sufiks_kartona = "pakovanja" if izabrana_sezona == "Torbe" else "kartona"
-                sufiks_jedinica = "kom" if izabrana_sezona == "Torbe" else "pari"
+                g_ispis = row.get("grupa", "Nema grupe")
+                pg_ispis = row.get("podgrupa", "Nema podgrupe")
                 
                 with st.container():
                     col_slika, col_detalji, col_akcije = st.columns([1.2, 3, 1.5])
@@ -636,18 +609,17 @@ elif meni == "Trenutno stanje":
                             st.write("❌ Nema slike")
                             
                     with col_detalji:
-                        st.subheader(f"Šifra modela: {sif} | Boja: {boj}")
-                        
+                        st.subheader(f"Šifra: {sif} | Boja: {boj}")
                         st.markdown(
-                            f'<div class="podsetnik-unosa">📆 Uneto: {datum_unosa_ispis} | 📦 Početno ušlo: {pocetni_pari} {sufiks_jedinica} ({pocetni_broj_kutija} {sufiks_kartona})</div>', 
+                            f'<div class="podsetnik-unosa">🏷️ Grupa: <b>{g_ispis}</b> -> {pg_ispis}<br>📆 Uneto: {datum_unosa_ispis} | 📦 Početno: {pocetni_pari} pari</div>', 
                             unsafe_allow_html=True
                         )
                         
                         c1, c2, c3, c4 = st.columns(4)
                         m_kol_label = "Ukupno komada" if izabrana_sezona == "Torbe" else "Ukupno pari na stanju"
-                        m_pak_label = "Pakovanje (kut. + kom)" if izabrana_sezona == "Torbe" else "Pakovanje"
+                        m_pak_label = "Pakovanje"
                         m_sufiks = "kom"
-                        m_pak_sufiks = f"{br_kutija} pak. + {ost_pari} kom" if izabrana_sezona == "Torbe" else f"{br_kutija} kut. + {ost_pari} par"
+                        m_pak_sufiks = f"{br_kutija} kut. + {ost_pari} par"
                         
                         c1.metric(m_kol_label, f"{row['broj_pari']} {m_sufiks}")
                         c2.metric(m_pak_label, m_pak_sufiks)
@@ -658,15 +630,26 @@ elif meni == "Trenutno stanje":
                         ekspander = st.expander("🛠️ Izmeni / Obriši")
                         with ekspander:
                             st.write("**Uredi podatke:**")
+                            
+                            # Izmena grupe i podgrupe
+                            dostupne_grupe_izm = list(STRUKTURA_GRUPA.get(izabrana_sezona, {}).keys())
+                            trenutna_g = row.get("grupa", "")
+                            ind_g = dostupne_grupe_izm.index(trenutna_g) if trenutna_g in dostupne_grupe_izm else 0
+                            nova_grupa = st.selectbox("Izmeni grupu:", dostupne_grupe_izm, index=ind_g, key=f"g_izm_{kljuc_id}")
+                            
+                            dostupne_podgrupe_izm = STRUKTURA_GRUPA[izabrana_sezona].get(nova_grupa, ["Ostalo"])
+                            trenutna_pg = row.get("podgrupa", "")
+                            ind_pg = dostupne_podgrupe_izm.index(trenutna_pg) if trenutna_pg in dostupne_podgrupe_izm else 0
+                            nova_podgrupa = st.selectbox("Izmeni podgrupu:", dostupne_podgrupe_izm, index=ind_pg, key=f"pg_izm_{kljuc_id}")
+                            
                             nova_sifra_izmena = st.text_input("Izmeni šifru modela:", value=sif, key=f"sifra_izm_{kljuc_id}").strip().upper()
                             indeks_trenutne_boje = lista_boja.index(boj) if lista_boja and boj in lista_boja else 0
                             nova_boja_izmena = st.selectbox("Izmeni boju artikla:", lista_boja, index=indeks_trenutne_boje, key=f"boja_{kljuc_id}")
                             
-                            labela_izmena_kol = "Novo ukupno komada:" if izabrana_sezona == "Torbe" else "Novo ukupno pari:"
-                            nova_kol = st.number_input(labela_izmena_kol, min_value=0, value=int(row['broj_pari']), step=1, key=f"kol_{kljuc_id}")
+                            nova_kol = st.number_input("Novo ukupno pari:", min_value=0, value=int(row['broj_pari']), step=1, key=f"kol_{kljuc_id}")
                             nova_p_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, value=float(row['prodajna_cena']), step=50.0, key=f"pc_{kljuc_id}")
                             nova_i_cena = st.number_input("Internet cena (RSD):", min_value=0.0, value=float(row['internet_cena']), step=50.0, key=f"ic_{kljuc_id}")
-                            nova_slika_file = st.file_uploader("Zamani sliku artikla:", type=["jpg", "jpeg", "png"], key=f"img_{kljuc_id}")
+                            nova_slika_file = st.file_uploader("Zameni sliku artikla:", type=["jpg", "jpeg", "png"], key=f"img_{kljuc_id}")
                             
                             col_b1, col_b2 = st.columns(2)
                             with col_b1:
@@ -693,8 +676,11 @@ elif meni == "Trenutno stanje":
                                                 cursor.execute('UPDATE artikli SET sifra = %s WHERE sifra = %s AND sezona = %s', (nova_sifra_izmena, sif, izabrana_sezona))
                                                 cursor.execute('UPDATE izlaz_robe SET sifra_artikla = %s WHERE sifra_artikla = %s', (nova_sifra_izmena, sif))
                                             
-                                            cursor.execute('UPDATE artikli SET prodajna_cena = %s, internet_cena = %s WHERE sifra = %s AND sezona = %s', (nova_p_cena, nova_i_cena, nova_sifra_izmena, izabrana_sezona))
-                                            cursor.execute('UPDATE artikli SET boja = %s, broj_pari = %s, slika_putanja = %s WHERE sifra = %s AND boja = %s AND sezona = %s', (nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
+                                            cursor.execute('''
+                                                UPDATE artikli 
+                                                SET grupa = %s, podgrupa = %s, prodajna_cena = %s, internet_cena = %s, boja = %s, broj_pari = %s, slika_putanja = %s 
+                                                WHERE sifra = %s AND boja = %s AND sezona = %s
+                                            ''', (nova_grupa, nova_podgrupa, nova_p_cena, nova_i_cena, nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
                                             
                                             conn.commit()
                                             ucitaj_artikle_za_sezonu.clear()
@@ -716,7 +702,6 @@ elif meni == "Trenutno stanje":
                                         cursor = conn.cursor()
                                         cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
                                         conn.commit()
-                                        
                                         ucitaj_artikle_za_sezonu.clear()
                                         ucitaj_sve_artikle.clear()
                                         st.warning("Obrisano!")
@@ -726,7 +711,6 @@ elif meni == "Trenutno stanje":
                                         except: pass
                 st.markdown("---")
 
-            # --- DUGME ZA VRH ---
             st.markdown(
                 """
                 <div class="dugme-vrh-kontejner">
@@ -755,7 +739,6 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
         lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", 
                          "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
 
-        # --- FUNKCIJA ZA AUTOMATSKO PRERAČUNAVANJE CENE I DOKUMENTOVANJE SELEKCIJE ---
         def azuriraj_cenu_izlaza():
             if "jedinstveni_izlaz_sifra" in st.session_state and "jedinstveni_izlaz_boja" in st.session_state:
                 izab_sifra_label = st.session_state["jedinstveni_izlaz_sifra"]
@@ -777,7 +760,6 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
                     st.session_state["jedinstveni_izlaz_boja"] = boje_za_sif[0]
             azuriraj_cenu_izlaza()
 
-        # Inicijalna postavka u session_state ako prvi put učitavamo
         if "jedinstveni_izlaz_sifra" not in st.session_state:
             st.session_state["jedinstveni_izlaz_sifra"] = opcije_sifre[0]
         
@@ -800,10 +782,7 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
             izabrani_datum = st.date_input("Izaberi datum izlaza:", datetime.now())
             
             izabrana_sifra_label = st.selectbox(
-                "Izaberi šifru modela:", 
-                opcije_sifre, 
-                key="jedinstveni_izlaz_sifra",
-                on_change=pri_promeni_sifre
+                "Izaberi šifru modela:", opcije_sifre, key="jedinstveni_izlaz_sifra", on_change=pri_promeni_sifre
             )
             prava_sifra = mapa_sifra_sezona[izabrana_sifra_label]
             
@@ -811,21 +790,14 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
             boje_za_sifru = sorted(artikli_za_sifru["boja"].unique().tolist())
             
             izabrana_boja = st.selectbox(
-                "Izaberi boju modela:", 
-                boje_za_sifru, 
-                key="jedinstveni_izlaz_boja",
-                on_change=azuriraj_cenu_izlaza
+                "Izaberi boju modela:", boje_za_sifru, key="jedinstveni_izlaz_boja", on_change=azuriraj_cenu_izlaza
             )
             
             izabrani_grad = st.selectbox(
-                "Izaberi grad:", 
-                lista_gradova, 
-                key="jedinstveni_izlaz_grad",
-                on_change=azuriraj_cenu_izlaza
+                "Izaberi grad:", lista_gradova, key="jedinstveni_izlaz_grad", on_change=azuriraj_cenu_izlaza
             )
             
         filtriran_artikal = artikli_za_sifru[artikli_za_sifru["boja"] == izabrana_boja]
-        
         zaliha_komada = 0
         artikal_sezona = ""
         if not filtriran_artikal.empty:
@@ -837,7 +809,6 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
             kljuc_nabavna_cena = f"nabavna_cena_{st.session_state['reset_izlaz_nabavna']}"
             
             kolicina_izlaza = st.number_input("Količina za izlaz:", min_value=1, step=1, value=None, key=kljuc_kolicina_izlaza)
-            
             prodajna_cena_par = st.number_input("Prodajna cena (RSD):", min_value=0.0, step=50.0, key="izlaz_prodajna_cena_input")
             nabavna_cena_par = st.number_input("Nabavna cena (Opciono):", min_value=0.0, step=50.0, value=None, key=kljuc_nabavna_cena)
             
@@ -884,7 +855,6 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
         if not df_izlazi.empty:
             lista_gradova = ["Internet", "Mladenovac Gore", "Mladenovac Dole", "Smederevska Palanka", "Zaječar", "Subotica", "Aleksinac", "Loznica", "Sremska Mitrovica", "Pančevo", "Vršac", "Bečej", "Prokuplje"]
             col_filter1, col_filter2, col_filter3 = st.columns(3)
-            
             stari_datum = datetime.now()
                 
             with col_filter1: od_datuma = st.date_input("Od datuma:", stari_datum)
@@ -897,13 +867,11 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
                 df_filtrirano = df_filtrirano[df_filtrirano['Grad'] == izabrani_grad_filter]
             
             excel_izlazi = konvertuj_u_excel(df_filtrirano)
-            
             ime_fajla_excel = f"svi_izlazi_{izabrani_grad_filter}_{od_str}_do_{do_str}.xlsx"
             
             st.download_button(
                 label="🟢 Preuzmi jedinstvenu istoriju izlaza kao Excel", 
-                data=excel_izlazi, 
-                file_name=ime_fajla_excel,
+                data=excel_izlazi, file_name=ime_fajla_excel,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
             
@@ -914,7 +882,7 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
         else:
             st.write("Još uvek nema zabeleženih izlaza robe u sistemu.")
     except Exception as e:
-        st.warning(f"Tabela sa istorijom ne može da se prikaže na standardan način, ali možete nesmetano stornirati zapise ispod. (Greška: {e})")
+        st.warning(f"Greška pri prikazu istorije: {e}")
 
     st.markdown("---")
     st.write("### 🚨 Storniranje (Brisanje) zapisa")
