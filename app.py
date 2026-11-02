@@ -25,7 +25,9 @@ STRUKTURA_GRUPA = {
         "Osnovna grupa": ["Osnovna podgrupa"]
     },
     "Torbe": {
-        "Osnovna grupa": ["Osnovna podgrupa"]
+        "TORBE": ["Velike", "Srednje", "Male", "Pismo", "Za plažu", "2 u 1"],
+        "NOVĆANICI": ["Veći", "Srednji", "Manji", "Kao torbica"],
+        "RANČEVI": ["Standardni"]
     }
 }
 
