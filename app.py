@@ -305,7 +305,6 @@ if meni == "Unos nove robe":
     
     col1, col2 = st.columns(2)
     with col1:
-        # Zavisni padajući meniji za Grupu i Podgrupu iznad šifre modela
         dostupne_grupe = list(STRUKTURA_GRUPA.get(izabrana_sezona, {"Ostalo": ["Ostalo"]}).keys())
         izabrana_grupa = st.selectbox("Grupa:", dostupne_grupe, key=f"unos_grupa_{st.session_state['reset_brojac']}")
         
@@ -497,15 +496,29 @@ elif meni == "Trenutno stanje":
         )
         st.markdown("---")
         
-        # Filteri za grupu, podgrupu i pretragu
+        # --- ZAVISNI FILTERI ZA GRUPU I PODGRUPU ---
         col_f1, col_f2, col_f3 = st.columns(3)
-        sve_grupe = df["grupa"].dropna().unique().tolist() if "grupa" in df.columns else []
-        sve_podgrupe = df["podgrupa"].dropna().unique().tolist() if "podgrupa" in df.columns else []
+        
+        sezona_struktura = STRUKTURA_GRUPA.get(izabrana_sezona, {})
+        sve_grupe = list(sezona_struktura.keys())
         
         with col_f1:
-            filter_grupe = st.multiselect("Filtriraj po grupi:", sve_grupe)
+            filter_grupe = st.multiselect("Filtriraj po grupi:", sve_grupe, key="filt_grupa")
+            
+        # Dinamičko prikazivanje samo podgrupa koje pripadaju izabranoj grupi
+        if filter_grupe:
+            dozvoljene_podgrupe = []
+            for g in filter_grupe:
+                dozvoljene_podgrupe.extend(sezona_struktura.get(g, []))
+            sve_podgrupe = sorted(list(set(dozvoljene_podgrupe)))
+        else:
+            dozvoljene_podgrupe = []
+            for g, pg_list in sezona_struktura.items():
+                dozvoljene_podgrupe.extend(pg_list)
+            sve_podgrupe = sorted(list(set(dozvoljene_podgrupe)))
+            
         with col_f2:
-            filter_podgrupe = st.multiselect("Filtriraj po podgrupi:", sve_podgrupe)
+            filter_podgrupe = st.multiselect("Filtriraj po podgrupi:", sve_podgrupe, key="filt_podgrupa")
         with col_f3:
             pretraga = st.text_input("🔍 Pretraži po šifri modela:", "").strip().upper()
         
@@ -631,7 +644,6 @@ elif meni == "Trenutno stanje":
                         with ekspander:
                             st.write("**Uredi podatke:**")
                             
-                            # Izmena grupe i podgrupe
                             dostupne_grupe_izm = list(STRUKTURA_GRUPA.get(izabrana_sezona, {}).keys())
                             trenutna_g = row.get("grupa", "")
                             ind_g = dostupne_grupe_izm.index(trenutna_g) if trenutna_g in dostupne_grupe_izm else 0
