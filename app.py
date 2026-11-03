@@ -10,7 +10,7 @@ import io
 # --- DEFINICIJA GRUPA I PODGRUPA PO SEZONAMA ---
 STRUKTURA_GRUPA = {
     "Jesen-Zima": {
-        "ŽENSKE ČIZME": ["Kratke ravne", "Kratke štikla", "Duge ravne", "UGG", "Martinke", "Snegarice", "Za babe", "Gumene"],
+        "ŽENSKE ČIZME": ["Kratke ravne", "Kratke štikla", "Duge ravne", "Duge štikla", "UGG", "Martinke", "Snegarice", "Za babe", "Gumene"],
         "ŽENSKE CIPELE": ["Salonke VTŠ", "Salonke STŠ", "Salonke MTŠ", "Salonke VDŠ", "Salonke SDŠ", "Salonke MDŠ", "Za starije žene", "Za babe", "Duboke", "Kanađanke"],
         "ŽENSKE PATIKE": ["Plitke", "Duboke"],
         "MUŠKE PATIKE": ["Plitke", "Duboke", "Kanađanke"],
