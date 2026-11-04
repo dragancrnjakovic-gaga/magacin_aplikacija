@@ -304,14 +304,30 @@ if meni == "Unos nove robe":
     kljuc_unos_kutija = f"unos_kut_{st.session_state['reset_brojac']}"
     kljuc_unos_prodajna = f"unos_pc_{st.session_state['reset_brojac']}"
     kljuc_unos_internet = f"unos_ic_{st.session_state['reset_brojac']}"
+    kljuc_unos_grupa = f"unos_grupa_{st.session_state['reset_brojac']}"
+    kljuc_unos_podgrupa = f"unos_podgrupa_{st.session_state['reset_brojac']}"
     
     col1, col2 = st.columns(2)
     with col1:
-        dostupne_grupe = list(STRUKTURA_GRUPA.get(izabrana_sezona, {"Ostalo": ["Ostalo"]}).keys())
-        izabrana_grupa = st.selectbox("Grupa:", dostupne_grupe, key=f"unos_grupa_{st.session_state['reset_brojac']}")
+        # Prazna polja na početku (index=None) sa zavisnim prikazom podgrupa
+        dostupne_grupe = list(STRUKTURA_GRUPA.get(izabrana_sezona, {}).keys())
+        izabrana_grupa = st.selectbox(
+            "Grupa:", 
+            options=dostupne_grupe, 
+            index=None, 
+            placeholder="Izaberi grupu...", 
+            key=kljuc_unos_grupa
+        )
         
-        dostupne_podgrupe = STRUKTURA_GRUPA[izabrana_sezona].get(izabrana_grupa, ["Ostalo"])
-        izabrana_podgrupa = st.selectbox("Podgrupa:", dostupne_podgrupe, key=f"unos_podgrupa_{st.session_state['reset_brojac']}")
+        dostupne_podgrupe = STRUKTURA_GRUPA[izabrana_sezona].get(izabrana_grupa, []) if izabrana_grupa else []
+        izabrana_podgrupa = st.selectbox(
+            "Podgrupa:", 
+            options=dostupne_podgrupe, 
+            index=None, 
+            placeholder="Izaberi podgrupu..." if izabrana_grupa else "Prvo izaberi grupu...",
+            disabled=not izabrana_grupa,
+            key=kljuc_unos_podgrupa
+        )
         
         sifra = st.text_input("Šifra modela:", value=st.session_state["unos_sifra"]).strip().upper()
         boja = st.selectbox("Boja modela:", lista_boja, index=lista_boja.index(st.session_state["unos_boja"]) if st.session_state["unos_boja"] in lista_boja else 0)
@@ -333,7 +349,9 @@ if meni == "Unos nove robe":
         broj_pari is None or 
         pari_u_kutiji is None or 
         prodajna_cena is None or 
-        internet_cena is None
+        internet_cena is None or
+        izabrana_grupa is None or
+        izabrana_podgrupa is None
     )
     
     st.write("")
@@ -507,7 +525,6 @@ elif meni == "Trenutno stanje":
         with col_f1:
             filter_grupe = st.multiselect("Filtriraj po grupi:", sve_grupe, key="filt_grupa")
             
-        # Dinamičko prikazivanje samo podgrupa koje pripadaju izabranoj grupi
         if filter_grupe:
             dozvoljene_podgrupe = []
             for g in filter_grupe:
