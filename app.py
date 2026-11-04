@@ -907,7 +907,7 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
             if not df_filtrirano.empty:
                 st.dataframe(df_filtrirano, use_container_width=True)
             else:
-                st.info("Nema zabeleženih izlaza za izabrani period i grad u tabeli.")
+                st.info("Nema zabeleženih izlaza za izabrani period i grad u tabelu.")
         else:
             st.write("Još uvek nema zabeleženih izlaza robe u sistemu.")
     except Exception as e:
@@ -970,7 +970,7 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
                         if sez_zapis:
                             cursor.execute("SELECT * FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif_zapis, boj_zapis, sez_zapis))
                             if cursor.fetchone() is not None:
-                                cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, sez_zapis))
+                                cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zari, sif_zapis, boj_zapis, sez_zapis))
                         else:
                             cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s', (kol_zapis, sif_zapis, boj_zapis))
                         
