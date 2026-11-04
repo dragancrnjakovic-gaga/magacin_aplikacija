@@ -143,7 +143,7 @@ def ucitaj_artikle_za_sezonu(sezona):
         return pd.DataFrame()
 
 @st.cache_data(ttl=60)
-def ucitaj_sve_artikle():
+def ucitaj_sve_artikli():
     try:
         conn = uzmi_vezu_sa_bazom()
         df = pd.read_sql_query("SELECT * FROM artikli ORDER BY sezona ASC, sifra ASC, boja ASC", conn)
@@ -382,7 +382,7 @@ if meni == "Unos nove robe":
             conn.commit()
             
             ucitaj_artikle_za_sezonu.clear()
-            ucitaj_sve_artikle.clear()
+            ucitaj_sve_artikli.clear()
             st.session_state["reset_brojac"] += 1
             
             st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}' (Grupa: {izabrana_grupa} -> {izabrana_podgrupa})!")
@@ -713,7 +713,7 @@ elif meni == "Trenutno stanje":
                                             
                                             conn.commit()
                                             ucitaj_artikle_za_sezonu.clear()
-                                            ucitaj_sve_artikle.clear()
+                                            ucitaj_sve_artikli.clear()
                                             st.success("Izmene uspešno sačuvane!")
                                             st.rerun()
                                         except psycopg2.IntegrityError:
@@ -732,7 +732,7 @@ elif meni == "Trenutno stanje":
                                         cursor.execute("DELETE FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif, boj, izabrana_sezona))
                                         conn.commit()
                                         ucitaj_artikle_za_sezonu.clear()
-                                        ucitaj_sve_artikle.clear()
+                                        ucitaj_sve_artikli.clear()
                                         st.warning("Obrisano!")
                                         st.rerun()
                                     except Exception:
@@ -867,7 +867,7 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
                     st.session_state["reset_izlaz_nabavna"] += 1
                     
                     ucitaj_artikle_za_sezonu.clear()
-                    ucitaj_sve_artikle.clear()
+                    ucitaj_sve_artikli.clear()
                     ucitaj_jedinstvenu_istoriju_izlaza.clear()
                     st.success("✅ Izlaz uspešno proknjižen u bazi!")
                     st.rerun()
@@ -970,13 +970,13 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
                         if sez_zapis:
                             cursor.execute("SELECT * FROM artikli WHERE sifra = %s AND boja = %s AND sezona = %s", (sif_zapis, boj_zapis, sez_zapis))
                             if cursor.fetchone() is not None:
-                                cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zari, sif_zapis, boj_zapis, sez_zapis))
+                                cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, sez_zapis))
                         else:
                             cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s', (kol_zapis, sif_zapis, boj_zapis))
                         
                         conn.commit()
                         ucitaj_artikle_za_sezonu.clear()
-                        ucitaj_sve_artikle.clear()
+                        ucitaj_sve_artikli.clear()
                         ucitaj_jedinstvenu_istoriju_izlaza.clear()
                         st.success("Zapis uspešno storniran i obrisan!")
                         st.rerun()
