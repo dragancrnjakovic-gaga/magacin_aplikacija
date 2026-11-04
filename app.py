@@ -297,9 +297,9 @@ if meni == "Unos nove robe":
     datum_unosa_odabir = st.date_input("📆 Izaberi datum unosa robe:", datetime.now())
     st.markdown("---")
     
-    if "unos_sifra" not in st.session_state: st.session_state["unos_sifra"] = ""
     if "unos_boja" not in st.session_state: st.session_state["unos_boja"] = lista_boja[0] if lista_boja else ""
     
+    kljuc_unos_sifra = f"unos_sifra_{st.session_state['reset_brojac']}"
     kljuc_unos_pari = f"unos_kol_{st.session_state['reset_brojac']}"
     kljuc_unos_kutija = f"unos_kut_{st.session_state['reset_brojac']}"
     kljuc_unos_prodajna = f"unos_pc_{st.session_state['reset_brojac']}"
@@ -309,7 +309,6 @@ if meni == "Unos nove robe":
     
     col1, col2 = st.columns(2)
     with col1:
-        # Prazna polja na početku (index=None) sa zavisnim prikazom podgrupa
         dostupne_grupe = list(STRUKTURA_GRUPA.get(izabrana_sezona, {}).keys())
         izabrana_grupa = st.selectbox(
             "Grupa:", 
@@ -329,7 +328,7 @@ if meni == "Unos nove robe":
             key=kljuc_unos_podgrupa
         )
         
-        sifra = st.text_input("Šifra modela:", value=st.session_state["unos_sifra"]).strip().upper()
+        sifra = st.text_input("Šifra modela:", value="", placeholder="Unesi šifru modela...", key=kljuc_unos_sifra).strip().upper()
         boja = st.selectbox("Boja modela:", lista_boja, index=lista_boja.index(st.session_state["unos_boja"]) if st.session_state["unos_boja"] in lista_boja else 0)
         
         labela_kol = "Količina (komada/pari):" if izabrana_sezona == "Torbe" else "Količina pari:"
@@ -384,7 +383,6 @@ if meni == "Unos nove robe":
             
             ucitaj_artikle_za_sezonu.clear()
             ucitaj_sve_artikle.clear()
-            st.session_state["unos_sifra"] = ""
             st.session_state["reset_brojac"] += 1
             
             st.success(f"Uspešno sačuvan model: Šifra '{sifra}' - Boja '{boja}' (Grupa: {izabrana_grupa} -> {izabrana_podgrupa})!")
@@ -758,7 +756,7 @@ elif meni == "Trenutno stanje":
 elif meni == "Evidencija izlaza (Jedinstvena)":
     st.header("📆 Centralni dnevni izlaz robe (Sve sekcije)")
     
-    df_svi_artikli = ucitaj_sve_artikle()
+    df_svi_artikli = ucitaj_sve_artikli()
     
     if df_svi_artikli.empty:
         st.info("💡 Trenutno nema nikakve robe na stanju u magacinu.")
