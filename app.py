@@ -17,7 +17,7 @@ STRUKTURA_GRUPA = {
         "MUŠKE CIPELE": ["Plitke", "Duboke", "Kanađanke", "Za dede"],
         "MUŠKE GUMENE ČIZME": ["Kratke", "Duboke"],
         "DEČIJE PATIKE": ["Muške", "Ženske"],
-        "DEČIJE ČIZME": ["Gumene", "Kanađanke", "Martinke", "Snegarice", "Klasične"],
+        "DEČIJE ČIZME": ["Gumene", "Kanađanke", "Martinke", "Snegarice", "Klasične", "UGG"],
         "KUĆNE PAPUČE": ["Muške", "Ženske"],
         "KLOMPE": ["Niske", "Visoke", "Print", "U džaku", "Muške"]
     },
@@ -26,7 +26,7 @@ STRUKTURA_GRUPA = {
     },
     "Torbe": {
         "TORBE": ["Velike", "Srednje", "Male", "Pismo", "Za plažu", "2 u 1"],
-        "NOVĆANICI": ["Veći", "Srednji", "Manji", "Kao torbica"],
+        "NOVČANICI": ["Veći", "Srednji", "Manji", "Kao torbica"],
         "RANČEVI": ["Standardni"]
     }
 }
