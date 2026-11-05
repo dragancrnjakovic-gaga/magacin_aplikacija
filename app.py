@@ -11,14 +11,14 @@ import io
 STRUKTURA_GRUPA = {
     "Jesen-Zima": {
         "ŽENSKE ČIZME": ["Kratke ravne", "Kratke štikla", "Duge ravne", "Duge štikla", "UGG", "Martinke", "Snegarice", "Za babe", "Gumene"],
-        "ŽENSKE CIPELE": ["Salonke VTŠ", "Salonke STŠ", "Salonke MTŠ", "Salonke VDŠ", "Salonke SDŠ", "Salonke MDŠ", "Za starije žene", "Za babe", "Duboke", "Kanađanke"],
+        "ŽENSKE CIPELE": ["Salonke VTŠ", "Salonke STŠ", "Salonke MTŠ", "Salonke VDŠ", "Salonke SDŠ", "Salonke MDŠ", "Za starije žene", "Za babe", "Duboke", "Kanađanke", "Espadrile"],
         "ŽENSKE PATIKE": ["Plitke", "Duboke"],
         "MUŠKE PATIKE": ["Plitke", "Duboke", "Kanađanke"],
         "MUŠKE CIPELE": ["Plitke", "Duboke", "Kanađanke", "Za dede"],
         "MUŠKE GUMENE ČIZME": ["Kratke", "Duboke"],
         "DEČIJE PATIKE": ["Muške", "Ženske"],
         "DEČIJE ČIZME": ["Gumene", "Kanađanke", "Martinke", "Snegarice", "Klasične", "UGG"],
-        "KUĆNE PAPUČE": ["Muške", "Ženske"],
+        "KUĆNE PAPUČE": ["Muške", "Ženske", "Dečije patofne"],
         "KLOMPE": ["Niske", "Visoke", "Print", "U džaku", "Muške"]
     },
     "Proleće-Leto": {
