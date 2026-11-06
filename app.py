@@ -18,11 +18,21 @@ STRUKTURA_GRUPA = {
         "MUŠKE GUMENE ČIZME": ["Kratke", "Duboke"],
         "DEČIJE PATIKE": ["Muške", "Ženske"],
         "DEČIJE ČIZME": ["Gumene", "Kanađanke", "Martinke", "Snegarice", "Klasične", "UGG"],
-        "KUĆNE PAPUČE": ["Muške", "Ženske", "Dečije patofne"],
-        "KLOMPE": ["Niske", "Visoke", "Print", "U džaku", "Muške"]
+        "KUĆNE PAPUČE": ["Muške", "Ženske", "Dečije patofne"]
     },
     "Proleće-Leto": {
-        "Osnovna grupa": ["Osnovna podgrupa"]
+        "ŽENSKE SANDALE": ["Ravne", "Ortoped", "Za babe", "Za starije žene", "Tanka štikla", "Debela štikla"],
+        "ŽENSKE SANDALETE": ["Debela štikla", "Tanka štikla", "Ravne"],
+        "ŽENSKE PAPUČE": ["Ortoped", "Deblji đon", "Tanji đon", "Za babe", "Crox"],
+        "ŽENSKE PATIKE": ["Krpene", "Standardne", "Ortoped"],
+        "ŽENSKE BALETANKE": ["Sportske", "Elegantne", "Za vodu"],
+        "MUŠKE PATIKE": ["Krpene", "Standardne"],
+        "MUŠKE SANDALE": ["Standardne"],
+        "PAPUČE ZA PLAŽU": ["Muške", "Ženske", "Dečije"],
+        "KLOMPE": ["Niske", "Visoke", "Print", "U džaku", "Muške"],
+        "DEČIJE SANDALE": ["Muške", "Ženske"],
+        "DEČIJE BALETANKE": ["Standardne"],
+        "DEČIJE PATIKE": ["Krpene", "Standardne"]
     },
     "Torbe": {
         "TORBE": ["Velike", "Srednje", "Male", "Pismo", "Za plažu", "2 u 1"],
