@@ -686,6 +686,10 @@ elif meni == "Trenutno stanje":
                             nova_boja_izmena = st.selectbox("Izmeni boju artikla:", lista_boja, index=indeks_trenutne_boje, key=f"boja_{kljuc_id}")
                             
                             nova_kol = st.number_input("Novo ukupno pari:", min_value=0, value=int(row['broj_pari']), step=1, key=f"kol_{kljuc_id}")
+                            
+                            labela_kut_izm = "Broj komada u pakovanju:" if izabrana_sezona == "Torbe" else "Broj pari u kutiji:"
+                            novi_pari_u_kutiji = st.number_input(labela_kut_izm, min_value=1, value=int(row['pari_u_kutiji']), step=1, key=f"kut_{kljuc_id}")
+                            
                             nova_p_cena = st.number_input("Prodajna cena (RSD):", min_value=0.0, value=float(row['prodajna_cena']), step=50.0, key=f"pc_{kljuc_id}")
                             nova_i_cena = st.number_input("Internet cena (RSD):", min_value=0.0, value=float(row['internet_cena']), step=50.0, key=f"ic_{kljuc_id}")
                             nova_slika_file = st.file_uploader("Zameni sliku artikla:", type=["jpg", "jpeg", "png"], key=f"img_{kljuc_id}")
@@ -717,9 +721,9 @@ elif meni == "Trenutno stanje":
                                             
                                             cursor.execute('''
                                                 UPDATE artikli 
-                                                SET grupa = %s, podgrupa = %s, prodajna_cena = %s, internet_cena = %s, boja = %s, broj_pari = %s, slika_putanja = %s 
+                                                SET grupa = %s, podgrupa = %s, prodajna_cena = %s, internet_cena = %s, boja = %s, broj_pari = %s, pari_u_kutiji = %s, slika_putanja = %s 
                                                 WHERE sifra = %s AND boja = %s AND sezona = %s
-                                            ''', (nova_grupa, nova_podgrupa, nova_p_cena, nova_i_cena, nova_boja_izmena, nova_kol, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
+                                            ''', (nova_grupa, nova_podgrupa, nova_p_cena, nova_i_cena, nova_boja_izmena, nova_kol, novi_pari_u_kutiji, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
                                             
                                             conn.commit()
                                             ucitaj_artikle_za_sezonu.clear()
