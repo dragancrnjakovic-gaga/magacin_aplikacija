@@ -18,7 +18,8 @@ STRUKTURA_GRUPA = {
         "MUŠKE GUMENE ČIZME": ["Kratke", "Duboke"],
         "DEČIJE PATIKE": ["Muške", "Ženske"],
         "DEČIJE ČIZME": ["Gumene", "Kanađanke", "Martinke", "Snegarice", "Klasične", "UGG"],
-        "KUĆNE PAPUČE": ["Muške", "Ženske", "Dečije patofne"]
+        "KUĆNE PAPUČE": ["Muške", "Ženske", "Dečije patofne"],
+        "AKSESOARI": ["Grejači"]
     },
     "Proleće-Leto": {
         "ŽENSKE SANDALE": ["Ravne", "Ortoped", "Za babe", "Za starije žene", "Tanka štikla", "Debela štikla"],
@@ -998,7 +999,7 @@ elif meni == "Evidencija izlaza (Jedinstvena)":
                             if cursor.fetchone() is not None:
                                 cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s AND sezona = %s', (kol_zapis, sif_zapis, boj_zapis, sez_zapis))
                         else:
-                            cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s', (kol_zapis, sif_zapis, boj_zapis))
+                            cursor.execute('UPDATE artikli SET broj_pari = broj_pari + %s WHERE sifra = %s AND boja = %s', (kol_zassis_zapis, sif_zapis, boj_zapis))
                         
                         conn.commit()
                         ucitaj_artikle_za_sezonu.clear()
