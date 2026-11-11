@@ -715,28 +715,40 @@ elif meni == "Trenutno stanje":
                                             conn = uzmi_vezu_sa_bazom()
                                             cursor = conn.cursor()
                                             
+                                            target_sifra = nova_sifra_izmena if nova_sifra_izmena != sif else sif
+                                            
+                                            # 1. Ako je promenjena šifra, ažuriramo šifru za sve zapise ovog modela i za izlaze robe
                                             if nova_sifra_izmena != sif:
                                                 cursor.execute('UPDATE artikli SET sifra = %s WHERE sifra = %s AND sezona = %s', (nova_sifra_izmena, sif, izabrana_sezona))
                                                 cursor.execute('UPDATE izlaz_robe SET sifra_artikla = %s WHERE sifra_artikla = %s', (nova_sifra_izmena, sif))
                                             
+                                            # 2. Ažuriranje zajedničkih atributa (grupa, podgrupa, prodajna i internet cena) ZA SVE BOJE OVOG MODELA
                                             cursor.execute('''
                                                 UPDATE artikli 
-                                                SET grupa = %s, podgrupa = %s, prodajna_cena = %s, internet_cena = %s, boja = %s, broj_pari = %s, pari_u_kutiji = %s, slika_putanja = %s 
+                                                SET grupa = %s, podgrupa = %s, prodajna_cena = %s, internet_cena = %s
+                                                WHERE sifra = %s AND sezona = %s
+                                            ''', (nova_grupa, nova_podgrupa, nova_p_cena, nova_i_cena, target_sifra, izabrana_sezona))
+                                            
+                                            # 3. Ažuriranje specifičnih atributa samo za ovaj konkretan zapis (boja, količina, kutija, slika)
+                                            cursor.execute('''
+                                                UPDATE artikli 
+                                                SET boja = %s, broj_pari = %s, pari_u_kutiji = %s, slika_putanja = %s 
                                                 WHERE sifra = %s AND boja = %s AND sezona = %s
-                                            ''', (nova_grupa, nova_podgrupa, nova_p_cena, nova_i_cena, nova_boja_izmena, nova_kol, novi_pari_u_kutiji, finalna_putanja_slike, nova_sifra_izmena, boj, izabrana_sezona))
+                                            ''', (nova_boja_izmena, nova_kol, novi_pari_u_kutiji, finalna_putanja_slike, target_sifra, boj, izabrana_sezona))
                                             
                                             conn.commit()
                                             ucitaj_artikle_za_sezonu.clear()
                                             ucitaj_sve_artikli.clear()
-                                            st.success("Izmene uspešno sačuvane!")
+                                            st.success("Izmene uspešno sačuvane za sve boje ovog modela!")
                                             st.rerun()
                                         except psycopg2.IntegrityError:
                                             try: conn.rollback()
                                             except: pass
                                             st.error(f"Greška: Šifra '{nova_sifra_izmena}' u boji '{nova_boja_izmena}' već postoji!")
-                                        except Exception:
+                                        except Exception as e:
                                             try: conn.rollback()
                                             except: pass
+                                            st.error(f"Došlo je do greške: {e}")
                                         
                             with col_b2:
                                 if st.button("🗑️ Obriši", key=f"Obr_{kljuc_id}"):
